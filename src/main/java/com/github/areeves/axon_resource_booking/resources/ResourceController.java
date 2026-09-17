@@ -1,6 +1,7 @@
 package com.github.areeves.axon_resource_booking.resources;
 
 import java.net.URI;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -9,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -20,9 +22,16 @@ import jakarta.validation.Valid;
 public class ResourceController {
 
 	private final CommandGateway commandGateway;
+	private final ResourceRepository resourceRepository;
 
-	public ResourceController(CommandGateway commandGateway) {
+	public ResourceController(CommandGateway commandGateway, ResourceRepository resourceRepository) {
 		this.commandGateway = commandGateway;
+		this.resourceRepository = resourceRepository;
+	}
+
+	@GetMapping
+	public List<ResourceEntity> getActiveResources() {
+		return resourceRepository.findByStatus(ResourceStatus.ACTIVE);
 	}
 
 	@PostMapping

@@ -61,4 +61,49 @@ public class ResourceEntity {
 	public UUID getResourceId() {
 		return resourceId;
 	}
+
+	public String getName() {
+		return name;
+	}
+
+	public String getDescription() {
+		return description;
+	}
+
+	public int getCapacity() {
+		return capacity;
+	}
+
+	public String getLocation() {
+		return location;
+	}
+
+	public ResourceStatus getStatus() {
+		return status;
+	}
+
+	public Instant getCreatedAt() {
+		return createdAt;
+	}
+
+	public Instant getLastModifiedAt() {
+		return lastModifiedAt;
+	}
+
+	public void apply(ResourceUpdatedEvent event) {
+		name = event.name();
+		description = event.description();
+		location = event.location();
+		lastModifiedAt = event.lastModifiedAt();
+	}
+
+	public void apply(ResourceDeactivatedEvent event) {
+		status = ResourceStatus.INACTIVE;
+		lastModifiedAt = event.lastModifiedAt();
+	}
+
+	public void apply(ResourceReactivatedEvent event) {
+		status = ResourceStatus.ACTIVE;
+		lastModifiedAt = event.lastModifiedAt();
+	}
 }
