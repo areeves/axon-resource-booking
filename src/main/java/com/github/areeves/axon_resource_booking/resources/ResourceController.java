@@ -4,6 +4,7 @@ import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.time.Instant;
 
 import org.axonframework.commandhandling.gateway.CommandGateway;
 import org.springframework.http.ResponseEntity;
@@ -15,7 +16,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 
 import jakarta.validation.Valid;
 
@@ -26,15 +30,35 @@ public class ResourceController {
 
 	private final CommandGateway commandGateway;
 	private final ResourceRepository resourceRepository;
+	private final ReservationRepository reservationRepository;
 
-	public ResourceController(CommandGateway commandGateway, ResourceRepository resourceRepository) {
+	public ResourceController(CommandGateway commandGateway, ResourceRepository resourceRepository,
+			ReservationRepository reservationRepository) {
 		this.commandGateway = commandGateway;
 		this.resourceRepository = resourceRepository;
+		this.reservationRepository = reservationRepository;
 	}
 
 	@GetMapping
 	public List<ResourceEntity> getActiveResources() {
 		return resourceRepository.findByStatus(ResourceStatus.ACTIVE);
+	}
+
+	@GetMapping("/available")
+	public List<ResourceEntity> getAvailableResources(@RequestParam Instant start, @RequestParam Instant end) {
+		validateTimeWindow(start, end);
+		List<ReservationStatus> activeStatuses = List.of(ReservationStatus.PENDING, ReservationStatus.CONFIRMED);
+		return resourceRepository.findByStatus(ResourceStatus.ACTIVE).stream()
+				.filter(resource -> reservationRepository
+						.findByResourceIdAndStatusInAndStartLessThanAndEndGreaterThan(resource.getResourceId(), activeStatuses,
+								end, start).size() < resource.getCapacity())
+				.toList();
+	}
+
+	private void validateTimeWindow(Instant start, Instant end) {
+		if (!end.isAfter(start)) {
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "end must be after start");
+		}
 	}
 
 	@GetMapping("/{resourceId}")

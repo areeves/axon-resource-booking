@@ -23,10 +23,10 @@ public class ReservationEntity {
 	@Column(nullable = false)
 	private UUID userId;
 
-	@Column(nullable = false)
+	@Column(name = "start_time", nullable = false)
 	private Instant start;
 
-	@Column(nullable = false)
+	@Column(name = "end_time", nullable = false)
 	private Instant end;
 
 	@Enumerated(EnumType.STRING)

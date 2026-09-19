@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -31,6 +32,15 @@ class ResourceControllerIntegrationTest {
 
 	@Autowired
 	private ResourceRepository resourceRepository;
+
+	@Autowired
+	private ReservationRepository reservationRepository;
+
+	@BeforeEach
+	void clearReadModels() {
+		reservationRepository.deleteAll();
+		resourceRepository.deleteAll();
+	}
 
 	@Test
 	void createsResourceAndProjectsItToDatabase() throws Exception {
@@ -65,5 +75,44 @@ class ResourceControllerIntegrationTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$[*].resourceId", org.hamcrest.Matchers.hasItem(activeResourceId.toString())))
 				.andExpect(jsonPath("$[*].resourceId", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(inactiveResourceId.toString()))));
+	}
+
+	@Test
+	void findsOnlyResourcesWithRemainingCapacity() throws Exception {
+		UUID fullResourceId = UUID.randomUUID();
+		UUID availableResourceId = UUID.randomUUID();
+		UUID userId = UUID.randomUUID();
+		Instant start = Instant.now().plusSeconds(3600);
+		Instant end = start.plusSeconds(3600);
+		resourceRepository.save(ResourceEntity.from(new ResourceCreatedEvent(fullResourceId, "Full Room", null, 1,
+				"Floor 1", Instant.now())));
+		resourceRepository.save(ResourceEntity.from(new ResourceCreatedEvent(availableResourceId, "Available Room", null, 2,
+				"Floor 1", Instant.now())));
+		reservationRepository.save(ReservationEntity.from(new ReservationCreatedEvent(fullResourceId, UUID.randomUUID(), userId,
+				start, end, ReservationStatus.CONFIRMED, Instant.now())));
+
+		mockMvc.perform(get("/resources/available")
+				.param("start", start.toString()).param("end", end.toString()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[*].resourceId", org.hamcrest.Matchers.hasItem(availableResourceId.toString())))
+				.andExpect(jsonPath("$[*].resourceId", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(fullResourceId.toString()))));
+	}
+
+	@Test
+	void queriesReservationByUserResourceAndId() throws Exception {
+		UUID reservationId = UUID.randomUUID();
+		UUID resourceId = UUID.randomUUID();
+		UUID userId = UUID.randomUUID();
+		Instant start = Instant.now().plusSeconds(3600);
+		ReservationEntity reservation = ReservationEntity.from(new ReservationCreatedEvent(resourceId, reservationId, userId,
+				start, start.plusSeconds(3600), ReservationStatus.PENDING, Instant.now()));
+		reservationRepository.save(reservation);
+
+		mockMvc.perform(get("/reservations/users/{userId}", userId)).andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].reservationId").value(reservationId.toString()));
+		mockMvc.perform(get("/reservations/resources/{resourceId}", resourceId)).andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].reservationId").value(reservationId.toString()));
+		mockMvc.perform(get("/reservations/{reservationId}", reservationId)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.userId").value(userId.toString()));
 	}
 }
