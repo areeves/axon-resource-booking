@@ -1,5 +1,6 @@
 package com.github.areeves.axon_resource_booking.resources;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -43,8 +44,14 @@ class ResourceControllerIntegrationTest {
 	}
 
 	@Test
+	void actuatorHealthEndpointIsAvailable() throws Exception {
+		mockMvc.perform(get("/actuator/health")).andExpect(status().isOk());
+	}
+
+	@Test
 	void createsResourceAndProjectsItToDatabase() throws Exception {
 		var result = mockMvc.perform(post("/resources")
+				.with(httpBasic("admin", "admin"))
 				.header("X-User-Id", UUID.randomUUID())
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
@@ -67,7 +74,7 @@ class ResourceControllerIntegrationTest {
 				.content("""
 						{"name":"Room A","description":"Training room","capacity":4,"location":"Floor 1"}
 						"""))
-				.andExpect(status().isBadRequest());
+				.andExpect(status().isUnauthorized());
 	}
 
 	@Test
@@ -77,6 +84,7 @@ class ResourceControllerIntegrationTest {
 				"Floor 1", Instant.now())));
 
 		mockMvc.perform(post("/resources/{resourceId}/reservations", resourceId)
+				.with(httpBasic("admin", "admin"))
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 						{"userId":"%s","start":"%s","end":"%s"}
@@ -96,7 +104,7 @@ class ResourceControllerIntegrationTest {
 		inactiveResource.apply(new ResourceDeactivatedEvent(inactiveResourceId, createdAt));
 		resourceRepository.save(inactiveResource);
 
-		mockMvc.perform(get("/resources"))
+		mockMvc.perform(get("/resources").with(httpBasic("admin", "admin")))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$[*].resourceId", org.hamcrest.Matchers.hasItem(activeResourceId.toString())))
 				.andExpect(jsonPath("$[*].resourceId", org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(inactiveResourceId.toString()))));
@@ -117,6 +125,7 @@ class ResourceControllerIntegrationTest {
 				start, end, ReservationStatus.CONFIRMED, Instant.now())));
 
 		mockMvc.perform(get("/resources/available")
+				.with(httpBasic("admin", "admin"))
 				.param("start", start.toString()).param("end", end.toString()))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$[*].resourceId", org.hamcrest.Matchers.hasItem(availableResourceId.toString())))
@@ -133,11 +142,11 @@ class ResourceControllerIntegrationTest {
 				start, start.plusSeconds(3600), ReservationStatus.PENDING, Instant.now()));
 		reservationRepository.save(reservation);
 
-		mockMvc.perform(get("/reservations/users/{userId}", userId)).andExpect(status().isOk())
+		mockMvc.perform(get("/reservations/users/{userId}", userId).with(httpBasic("admin", "admin"))).andExpect(status().isOk())
 				.andExpect(jsonPath("$[0].reservationId").value(reservationId.toString()));
-		mockMvc.perform(get("/reservations/resources/{resourceId}", resourceId)).andExpect(status().isOk())
+		mockMvc.perform(get("/reservations/resources/{resourceId}", resourceId).with(httpBasic("admin", "admin"))).andExpect(status().isOk())
 				.andExpect(jsonPath("$[0].reservationId").value(reservationId.toString()));
-		mockMvc.perform(get("/reservations/{reservationId}", reservationId)).andExpect(status().isOk())
+		mockMvc.perform(get("/reservations/{reservationId}", reservationId).with(httpBasic("admin", "admin"))).andExpect(status().isOk())
 				.andExpect(jsonPath("$.userId").value(userId.toString()));
 	}
 }

@@ -1,0 +1,65 @@
+# Axon Resource Booking
+
+A Spring Boot application demonstrating CQRS + event sourcing with Axon for resource booking and reservation management.
+
+## Architecture overview
+
+- Write side: resource and reservation commands are handled by aggregates.
+- Event store: PostgreSQL-backed Axon event store is the source of truth.
+- Read side: event handlers project state into JPA read models used by the REST queries.
+- API layer: REST endpoints expose commands and queries for resource and reservation operations.
+
+## Requirements covered
+
+- CQRS separation between command and query flows
+- Aggregate-enforced business invariants
+- Event-sourced history and rebuildable projections
+- Operational readiness with Actuator health and metrics
+- Basic security using HTTP Basic auth for the API surface
+
+## Local run
+
+### With Docker Compose
+
+```bash
+docker compose up --build
+```
+
+The application listens on port 8080 and PostgreSQL listens on 5432.
+
+### Direct local run
+
+```bash
+export DB_URL=jdbc:postgresql://localhost:5432/axon_resource_booking
+export DB_USERNAME=postgres
+export DB_PASSWORD=postgres
+./mvnw spring-boot:run
+```
+
+## API access
+
+All REST endpoints require HTTP Basic authentication. Use the default credentials:
+
+- Username: admin
+- Password: admin
+
+OpenAPI documentation is available at:
+
+- Swagger UI: http://localhost:8080/docs
+- OpenAPI JSON: http://localhost:8080/v3/api-docs
+
+## Health, metrics, and event inspection
+
+- Health: http://localhost:8080/actuator/health
+- Prometheus metrics: http://localhost:8080/actuator/prometheus
+- Event store inspection: use the reservation event endpoint at /reservations/{reservationId}/events
+
+## Rebuilding projections
+
+If the read models drift or need to be rebuilt from the event stream, restart the application with a clean database or delete the projection tables and rehydrate the event store by replaying the aggregate events through Axon.
+
+## Key design decisions
+
+1. Business rules stay inside aggregates so the event store remains the canonical truth.
+2. Projections are intentionally separate from command execution to keep the query side eventually consistent.
+3. User identity is included with commands via the X-User-Id header, while API auth is handled through HTTP Basic authentication.

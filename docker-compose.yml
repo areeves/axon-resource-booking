@@ -3,8 +3,10 @@ services:
     build:
       context: .
       dockerfile: .devcontainer/Dockerfile
-    command: sleep infinity
+    command: ./mvnw spring-boot:run
     working_dir: /workspaces/axon-resource-booking
+    ports:
+      - "8080:8080"
     volumes:
       - .:/workspaces/axon-resource-booking:cached
       - maven-cache:/home/vscode/.m2
@@ -12,6 +14,8 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/axon_resource_booking
       DB_USERNAME: postgres
       DB_PASSWORD: postgres
+      SPRING_SECURITY_USER_NAME: admin
+      SPRING_SECURITY_USER_PASSWORD: admin
     depends_on:
       postgres:
         condition: service_healthy
@@ -27,6 +31,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    ports:
+      - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
