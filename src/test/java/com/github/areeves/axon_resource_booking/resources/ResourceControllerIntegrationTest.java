@@ -45,6 +45,7 @@ class ResourceControllerIntegrationTest {
 	@Test
 	void createsResourceAndProjectsItToDatabase() throws Exception {
 		var result = mockMvc.perform(post("/resources")
+				.header("X-User-Id", UUID.randomUUID())
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 						{"name":"Room A","description":"Training room","capacity":4,"location":"Floor 1"}
@@ -57,6 +58,30 @@ class ResourceControllerIntegrationTest {
 				.andExpect(header().string("Location", org.hamcrest.Matchers.matchesPattern("/resources/.+")));
 
 		await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> assertThat(resourceRepository.count()).isEqualTo(1));
+	}
+
+	@Test
+	void requiresUserIdentityHeaderForCreateResource() throws Exception {
+		mockMvc.perform(post("/resources")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"name":"Room A","description":"Training room","capacity":4,"location":"Floor 1"}
+						"""))
+				.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void requiresUserIdentityHeaderForReserveResource() throws Exception {
+		UUID resourceId = UUID.randomUUID();
+		resourceRepository.save(ResourceEntity.from(new ResourceCreatedEvent(resourceId, "Room A", null, 4,
+				"Floor 1", Instant.now())));
+
+		mockMvc.perform(post("/resources/{resourceId}/reservations", resourceId)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"userId":"%s","start":"%s","end":"%s"}
+						""".formatted(UUID.randomUUID(), Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200))))
+				.andExpect(status().isBadRequest());
 	}
 
 	@Test

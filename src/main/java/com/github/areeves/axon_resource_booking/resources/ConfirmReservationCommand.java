@@ -4,5 +4,5 @@ import java.util.UUID;
 
 import org.axonframework.modelling.command.TargetAggregateIdentifier;
 
-public record ConfirmReservationCommand(@TargetAggregateIdentifier UUID resourceId, UUID reservationId) {
+public record ConfirmReservationCommand(@TargetAggregateIdentifier UUID resourceId, UUID reservationId, UUID userId) {
 }

@@ -35,7 +35,7 @@ class ReservationLifecycleTest {
 		fixture.given(new ResourceCreatedEvent(resourceId, "Room A", null, 1, "Floor 1", Instant.now()),
 				new ReservationCreatedEvent(resourceId, firstReservationId, firstUserId, start, end,
 						ReservationStatus.PENDING, Instant.now()))
-				.when(new ConfirmReservationCommand(resourceId, firstReservationId))
+				.when(new ConfirmReservationCommand(resourceId, firstReservationId, firstUserId))
 				.expectSuccessfulHandlerExecution();
 	}
 

@@ -4,6 +4,6 @@ import java.util.UUID;
 
 import org.axonframework.modelling.command.TargetAggregateIdentifier;
 
-public record UpdateResourceCommand(@TargetAggregateIdentifier UUID resourceId, String name, String description,
-		String location) {
+public record UpdateResourceCommand(@TargetAggregateIdentifier UUID resourceId, UUID userId, String name,
+		String description, String location) {
 }

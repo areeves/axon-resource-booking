@@ -4,5 +4,5 @@ import java.util.UUID;
 
 import org.axonframework.modelling.command.TargetAggregateIdentifier;
 
-public record ReactivateResourceCommand(@TargetAggregateIdentifier UUID resourceId) {
+public record ReactivateResourceCommand(@TargetAggregateIdentifier UUID resourceId, UUID userId) {
 }

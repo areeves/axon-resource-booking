@@ -38,12 +38,18 @@ public class ResourceAggregate {
 
 	@CommandHandler
 	public void handle(UpdateResourceCommand command) {
+		if (command.userId() == null) {
+			throw new IllegalArgumentException("User identity is required");
+		}
 		AggregateLifecycle.apply(new ResourceUpdatedEvent(resourceId, command.name(), command.description(),
 				command.location(), Instant.now()));
 	}
 
 	@CommandHandler
 	public void handle(DeactivateResourceCommand command) {
+		if (command.userId() == null) {
+			throw new IllegalArgumentException("User identity is required");
+		}
 		if (status == ResourceStatus.INACTIVE) {
 			throw new IllegalStateException("Resource is already inactive");
 		}
@@ -52,6 +58,9 @@ public class ResourceAggregate {
 
 	@CommandHandler
 	public void handle(ReactivateResourceCommand command) {
+		if (command.userId() == null) {
+			throw new IllegalArgumentException("User identity is required");
+		}
 		if (status == ResourceStatus.ACTIVE) {
 			throw new IllegalStateException("Resource is already active");
 		}
@@ -98,6 +107,9 @@ public class ResourceAggregate {
 
 	@CommandHandler
 	public void handle(ConfirmReservationCommand command) {
+		if (command.userId() == null) {
+			throw new IllegalArgumentException("User identity is required");
+		}
 		Reservation reservation = reservation(command.reservationId());
 		if (reservation.status() != ReservationStatus.PENDING) {
 			throw new IllegalStateException("Only pending reservations may be confirmed");
