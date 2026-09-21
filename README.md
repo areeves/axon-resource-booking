@@ -56,7 +56,13 @@ OpenAPI documentation is available at:
 
 ## Rebuilding projections
 
-If the read models drift or need to be rebuilt from the event stream, restart the application with a clean database or delete the projection tables and rehydrate the event store by replaying the aggregate events through Axon.
+An administrator can rebuild both read models from the event store with:
+
+```bash
+curl -u admin:admin -X POST http://localhost:8080/admin/projections/rebuild
+```
+
+The endpoint clears the projection tables and resets the Axon tracking processor. It returns `202 Accepted`; query results become available again after replay completes.
 
 ## Key design decisions
 

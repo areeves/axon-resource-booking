@@ -16,7 +16,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -65,6 +65,27 @@ class ResourceControllerIntegrationTest {
 				.andExpect(header().string("Location", org.hamcrest.Matchers.matchesPattern("/resources/.+")));
 
 		await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> assertThat(resourceRepository.count()).isEqualTo(1));
+	}
+
+	@Test
+	void rejectsDuplicateResourceName() throws Exception {
+		resourceRepository.save(ResourceEntity.from(new ResourceCreatedEvent(UUID.randomUUID(), "Room A", null, 4,
+				"Floor 1", Instant.now())));
+
+		mockMvc.perform(post("/resources")
+				.with(httpBasic("admin", "admin"))
+				.header("X-User-Id", UUID.randomUUID())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"name":"Room A","description":"Another room","capacity":2,"location":"Floor 2"}
+						"""))
+				.andExpect(status().isConflict());
+	}
+
+	@Test
+	void rebuildsProjectionsThroughAdminEndpoint() throws Exception {
+		mockMvc.perform(post("/admin/projections/rebuild").with(httpBasic("admin", "admin")))
+				.andExpect(status().isAccepted());
 	}
 
 	@Test

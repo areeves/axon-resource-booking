@@ -29,6 +29,15 @@ public class ResourceAggregate {
 
 	@CommandHandler
 	public ResourceAggregate(CreateResourceCommand command) {
+		if (command.userId() == null) {
+			throw new IllegalArgumentException("User identity is required");
+		}
+		if (command.name() == null || command.name().isBlank()) {
+			throw new IllegalArgumentException("Resource name is required");
+		}
+		if (command.location() == null || command.location().isBlank()) {
+			throw new IllegalArgumentException("Resource location is required");
+		}
 		if (command.capacity() < 1) {
 			throw new IllegalArgumentException("Resource capacity must be at least 1");
 		}
@@ -40,6 +49,12 @@ public class ResourceAggregate {
 	public void handle(UpdateResourceCommand command) {
 		if (command.userId() == null) {
 			throw new IllegalArgumentException("User identity is required");
+		}
+		if (command.name() == null || command.name().isBlank()) {
+			throw new IllegalArgumentException("Resource name is required");
+		}
+		if (command.location() == null || command.location().isBlank()) {
+			throw new IllegalArgumentException("Resource location is required");
 		}
 		AggregateLifecycle.apply(new ResourceUpdatedEvent(resourceId, command.name(), command.description(),
 				command.location(), Instant.now()));
@@ -69,6 +84,12 @@ public class ResourceAggregate {
 
 	@CommandHandler
 	public void handle(ReserveResourceCommand command) {
+		if (command.userId() == null) {
+			throw new IllegalArgumentException("User identity is required");
+		}
+		if (command.start() == null || command.end() == null) {
+			throw new IllegalArgumentException("Reservation start and end are required");
+		}
 		if (status == ResourceStatus.INACTIVE) {
 			throw new IllegalStateException("Reservations are not allowed on an inactive resource");
 		}
@@ -95,6 +116,9 @@ public class ResourceAggregate {
 
 	@CommandHandler
 	public void handle(CancelReservationCommand command) {
+		if (command.userId() == null) {
+			throw new IllegalArgumentException("User identity is required");
+		}
 		Reservation reservation = reservation(command.reservationId());
 		if (!command.admin() && !reservation.userId().equals(command.userId())) {
 			throw new IllegalStateException("Only the reservation owner or an admin may cancel it");
