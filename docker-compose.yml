@@ -10,8 +10,6 @@ services:
     volumes:
       - .:/workspaces/axon-resource-booking:cached
       - maven-cache:/home/vscode/.m2
-    ports:
-      - "8080:8080"
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/axon_resource_booking
       DB_USERNAME: postgres
