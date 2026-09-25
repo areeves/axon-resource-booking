@@ -11,6 +11,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -37,8 +39,12 @@ class ResourceControllerIntegrationTest {
 	@Autowired
 	private ReservationRepository reservationRepository;
 
+	@Autowired
+	private ResourceUtilizationRepository utilizationRepository;
+
 	@BeforeEach
 	void clearReadModels() {
+		utilizationRepository.deleteAll();
 		reservationRepository.deleteAll();
 		resourceRepository.deleteAll();
 	}
@@ -169,5 +175,70 @@ class ResourceControllerIntegrationTest {
 				.andExpect(jsonPath("$[0].reservationId").value(reservationId.toString()));
 		mockMvc.perform(get("/reservations/{reservationId}", reservationId).with(httpBasic("admin", "admin"))).andExpect(status().isOk())
 				.andExpect(jsonPath("$.userId").value(userId.toString()));
+	}
+
+	@Test
+	void reportsDailyUtilizationAcrossUtcMidnightAndRemovesCancelledReservations() throws Exception {
+		UUID userId = UUID.randomUUID();
+		var createResult = mockMvc.perform(post("/resources")
+				.with(httpBasic("admin", "admin"))
+				.header("X-User-Id", userId)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"name":"Utilization Room","description":null,"capacity":2,"location":"Floor 1"}
+						"""))
+				.andExpect(request().asyncStarted())
+				.andReturn();
+		String location = mockMvc.perform(asyncDispatch(createResult))
+				.andExpect(status().isCreated())
+				.andReturn().getResponse().getHeader("Location");
+		UUID resourceId = UUID.fromString(location.substring(location.lastIndexOf('/') + 1));
+		await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> assertThat(resourceRepository.findById(resourceId)).isPresent());
+
+		LocalDate firstDay = LocalDate.now(ZoneOffset.UTC).plusDays(2);
+		Instant start = firstDay.atTime(23, 0).toInstant(ZoneOffset.UTC);
+		Instant end = firstDay.plusDays(1).atTime(1, 0).toInstant(ZoneOffset.UTC);
+		var reserveResult = mockMvc.perform(post("/resources/{resourceId}/reservations", resourceId)
+				.with(httpBasic("admin", "admin"))
+				.header("X-User-Id", userId)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"start":"%s","end":"%s"}
+						""".formatted(start, end)))
+				.andExpect(request().asyncStarted())
+				.andReturn();
+		String reservationLocation = mockMvc.perform(asyncDispatch(reserveResult))
+				.andExpect(status().isCreated())
+				.andReturn().getResponse().getHeader("Location");
+		String[] reservationPath = reservationLocation.split("/");
+		UUID reservationId = UUID.fromString(reservationPath[reservationPath.length - 1]);
+
+		await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> assertThat(utilizationRepository.count()).isEqualTo(2));
+		mockMvc.perform(get("/resources/{resourceId}/utilization", resourceId)
+				.with(httpBasic("admin", "admin"))
+				.param("from", firstDay.toString())
+				.param("to", firstDay.plusDays(1).toString()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].reservationCount").value(1))
+				.andExpect(jsonPath("$[0].occupiedHours").value(1.0))
+				.andExpect(jsonPath("$[0].utilizationPercent").value(2.08))
+				.andExpect(jsonPath("$[1].reservationCount").value(1))
+				.andExpect(jsonPath("$[1].occupiedHours").value(1.0));
+
+		var cancelResult = mockMvc.perform(post("/resources/{resourceId}/reservations/{reservationId}/cancel", resourceId, reservationId)
+				.with(httpBasic("admin", "admin"))
+				.header("X-User-Id", userId))
+				.andExpect(request().asyncStarted())
+				.andReturn();
+		mockMvc.perform(asyncDispatch(cancelResult)).andExpect(status().isNoContent());
+		await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> assertThat(utilizationRepository.findAll())
+				.allSatisfy(utilization -> assertThat(utilization.getReservationCount()).isZero()));
+		mockMvc.perform(get("/resources/{resourceId}/utilization", resourceId)
+				.with(httpBasic("admin", "admin"))
+				.param("from", firstDay.toString())
+				.param("to", firstDay.plusDays(1).toString()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].occupiedHours").value(0.0))
+				.andExpect(jsonPath("$[1].occupiedHours").value(0.0));
 	}
 }

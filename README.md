@@ -53,10 +53,13 @@ OpenAPI documentation is available at:
 - Health: http://localhost:8080/actuator/health
 - Prometheus metrics: http://localhost:8080/actuator/prometheus
 - Event store inspection: use the reservation event endpoint at /reservations/{reservationId}/events
+- Daily resource utilization: GET /resources/{resourceId}/utilization?from=YYYY-MM-DD&to=YYYY-MM-DD
+
+Utilization is projected per UTC day from pending and confirmed reservations. Each daily result includes the reservation count, occupied hours, and the percentage of the resource's capacity-hours used. Date ranges are inclusive and limited to 366 days; days without bookings are returned with zero totals.
 
 ## Rebuilding projections
 
-An administrator can rebuild both read models from the event store with:
+An administrator can rebuild the resource, reservation, and utilization read models from the event store with:
 
 ```bash
 curl -u admin:admin -X POST http://localhost:8080/admin/projections/rebuild

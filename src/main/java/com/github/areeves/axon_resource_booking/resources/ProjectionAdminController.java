@@ -14,12 +14,14 @@ public class ProjectionAdminController {
 
 	private final ResourceRepository resourceRepository;
 	private final ReservationRepository reservationRepository;
+	private final ResourceUtilizationRepository utilizationRepository;
 	private final EventProcessingConfiguration eventProcessingConfiguration;
 
 	public ProjectionAdminController(ResourceRepository resourceRepository, ReservationRepository reservationRepository,
-			EventProcessingConfiguration eventProcessingConfiguration) {
+			ResourceUtilizationRepository utilizationRepository, EventProcessingConfiguration eventProcessingConfiguration) {
 		this.resourceRepository = resourceRepository;
 		this.reservationRepository = reservationRepository;
+		this.utilizationRepository = utilizationRepository;
 		this.eventProcessingConfiguration = eventProcessingConfiguration;
 	}
 
@@ -28,6 +30,7 @@ public class ProjectionAdminController {
 	public ResponseEntity<Void> rebuild() {
 		resourceRepository.deleteAllInBatch();
 		reservationRepository.deleteAllInBatch();
+		utilizationRepository.deleteAllInBatch();
 		TrackingEventProcessor processor = eventProcessingConfiguration
 				.eventProcessor("resource-projections", TrackingEventProcessor.class)
 				.orElseThrow(() -> new IllegalStateException("Projection processor is not tracking-enabled"));
