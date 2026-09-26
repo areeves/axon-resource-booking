@@ -26,6 +26,22 @@ docker compose up --build
 ```
 
 The application listens on port 8080 and PostgreSQL listens on 5432.
+The Compose configuration enables sample resources and future reservations on startup. Sample data is created through Axon commands and is not duplicated when the app restarts.
+
+To rebuild the database from scratch and repopulate the sample data:
+
+```bash
+docker compose down -v
+docker compose up --build
+```
+
+### Sample data for a direct local run
+
+Set `APP_SAMPLE_DATA_ENABLED=true` when starting the application:
+
+```bash
+APP_SAMPLE_DATA_ENABLED=true ./mvnw spring-boot:run
+```
 
 ### Direct local run
 

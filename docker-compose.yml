@@ -16,6 +16,7 @@ services:
       DB_PASSWORD: postgres
       SPRING_SECURITY_USER_NAME: admin
       SPRING_SECURITY_USER_PASSWORD: admin
+      APP_SAMPLE_DATA_ENABLED: "true"
     depends_on:
       postgres:
         condition: service_healthy
