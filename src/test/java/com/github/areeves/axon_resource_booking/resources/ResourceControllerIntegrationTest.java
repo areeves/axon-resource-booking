@@ -203,8 +203,8 @@ class ResourceControllerIntegrationTest {
 				.header("X-User-Id", userId)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
-						{"start":"%s","end":"%s"}
-						""".formatted(start, end)))
+						{"userId":"%s","start":"%s","end":"%s"}
+						""".formatted(userId, start, end)))
 				.andExpect(request().asyncStarted())
 				.andReturn();
 		String reservationLocation = mockMvc.perform(asyncDispatch(reserveResult))

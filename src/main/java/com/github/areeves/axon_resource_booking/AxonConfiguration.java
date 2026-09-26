@@ -42,10 +42,11 @@ public class AxonConfiguration {
 
 	@Bean
 	EventStorageEngine eventStorageEngine(EntityManagerProvider entityManagerProvider,
-			TransactionManager transactionManager) {
+			TransactionManager transactionManager, Serializer eventSerializer) {
 		return JpaEventStorageEngine.builder()
 				.entityManagerProvider(entityManagerProvider)
 				.transactionManager(transactionManager)
+				.eventSerializer(eventSerializer)
 				.build();
 	}
 }
