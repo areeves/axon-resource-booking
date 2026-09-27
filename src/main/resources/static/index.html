@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#102c28">
+  <title>Fieldnote | Resource operations</title>
+  <link rel="stylesheet" href="/console.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="rail">
+      <a class="brand" href="#resources" aria-label="Fieldnote home">
+        <span class="brand-mark">F</span>
+        <span class="brand-name">fieldnote<span>RESOURCE OPS</span></span>
+      </a>
+      <div class="rail-label">WORKSPACE</div>
+      <nav class="navigation" aria-label="Main navigation">
+        <button class="nav-item active" data-view="resources"><span class="nav-icon">▦</span>Resources <span class="nav-count" id="resource-count">—</span></button>
+        <button class="nav-item" data-view="reservations"><span class="nav-icon">◷</span>Reservations</button>
+        <button class="nav-item" data-view="utilization"><span class="nav-icon">▤</span>Utilization</button>
+      </nav>
+      <div class="rail-label rail-label-bottom">SYSTEM</div>
+      <nav class="navigation">
+        <button class="nav-item" data-view="admin"><span class="nav-icon">⚙</span>Administration</button>
+      </nav>
+      <div class="rail-foot">
+        <span class="rail-dot"></span>
+        <span>LOCAL WORKSPACE</span>
+        <span class="rail-version">v1.0</span>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <div class="breadcrumbs"><span>WORKSPACE</span><span class="crumb-slash">/</span><strong id="page-crumb">Resources</strong></div>
+        <div class="top-actions">
+          <span class="connection-state" id="connection-state"><i></i>Not connected</span>
+          <button class="actor-chip" id="open-connection" type="button" title="Configure API connection">
+            <span class="actor-avatar">A</span><span id="actor-label">Set up connection</span><span class="chevron">⌄</span>
+          </button>
+        </div>
+      </header>
+
+      <section class="view active" id="view-resources">
+        <div class="page-heading">
+          <div><div class="eyebrow">INVENTORY / COMMANDS</div><h1>Resources</h1><p class="page-subtitle">Manage spaces and make reservations.</p></div>
+          <button class="button button-primary" id="new-resource-button" type="button"><span>＋</span> New resource</button>
+        </div>
+
+        <form class="filter-bar" id="availability-form">
+          <span class="filter-label">CHECK AVAILABILITY</span>
+          <label>From <input name="start" type="datetime-local" required></label>
+          <label>To <input name="end" type="datetime-local" required></label>
+          <button class="button button-dark" type="submit">Find available</button>
+          <button class="text-button" id="show-active" type="button">All active resources</button>
+        </form>
+
+        <div class="resource-layout">
+          <section class="resource-list-panel">
+            <div class="section-bar"><div><span class="section-kicker">DIRECTORY</span><h2 id="resource-list-title">Active resources</h2></div><button class="icon-button" id="refresh-resources" type="button" title="Refresh resources" aria-label="Refresh resources">↻</button></div>
+            <div class="resource-list" id="resource-list"><div class="empty-state">Connect to load resources.</div></div>
+            <form class="lookup-form" id="resource-lookup-form">
+              <label for="resource-lookup">LOOK UP BY ID</label>
+              <div class="inline-field"><input id="resource-lookup" name="resourceId" placeholder="Resource UUID" required><button class="icon-button" type="submit" aria-label="Look up resource">→</button></div>
+            </form>
+          </section>
+          <section class="resource-detail-panel" id="resource-detail">
+            <div class="empty-detail"><span class="empty-glyph">▦</span><h2>Select a resource</h2><p>Choose a resource from the directory to view details and actions.</p></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="view-reservations">
+        <div class="page-heading"><div><div class="eyebrow">BOOKING / LOOKUP</div><h1>Reservations</h1><p class="page-subtitle">Find bookings by user, resource, or reservation ID.</p></div></div>
+        <div class="query-tabs" role="tablist" aria-label="Reservation lookup type">
+          <button class="query-tab active" data-query="user" type="button">By user</button>
+          <button class="query-tab" data-query="resource" type="button">By resource</button>
+          <button class="query-tab" data-query="id" type="button">By reservation ID</button>
+        </div>
+        <form class="query-form" id="reservation-query-form">
+          <label class="query-input-label" for="reservation-query-input">USER UUID</label>
+          <div class="query-controls"><input id="reservation-query-input" name="value" placeholder="User UUID" required><button class="button button-primary" type="submit">Search reservations <span>→</span></button></div>
+        </form>
+        <section class="results-section"><div class="section-bar"><div><span class="section-kicker">QUERY RESULTS</span><h2 id="reservation-results-title">Reservations</h2></div><span class="result-count" id="reservation-result-count"></span></div><div id="reservation-results"><div class="empty-state">Run a lookup to see reservation records.</div></div></section>
+        <section class="event-section hidden" id="event-section"><div class="section-bar"><div><span class="section-kicker">EVENT STORE</span><h2>Reservation history</h2></div><button class="icon-button" type="button" id="close-events" aria-label="Close event history">×</button></div><pre class="json-output" id="event-output"></pre></section>
+      </section>
+
+      <section class="view" id="view-utilization">
+        <div class="page-heading"><div><div class="eyebrow">CAPACITY / DAILY PROJECTION</div><h1>Utilization</h1><p class="page-subtitle">Review occupied hours and capacity across a date range.</p></div></div>
+        <form class="utilization-form" id="utilization-form">
+          <label>Resource UUID<input name="resourceId" placeholder="Select or paste a resource UUID" required></label>
+          <label>From<input name="from" type="date" required></label>
+          <label>To<input name="to" type="date" required></label>
+          <button class="button button-primary" type="submit">View utilization <span>→</span></button>
+        </form>
+        <section class="utilization-results"><div class="section-bar"><div><span class="section-kicker">DAILY BREAKDOWN</span><h2 id="utilization-title">Select a resource and date range</h2></div><span class="result-count" id="utilization-count"></span></div><div id="utilization-table"><div class="empty-state">Utilization is shown in UTC. Date ranges can include up to 366 days.</div></div></section>
+      </section>
+
+      <section class="view" id="view-admin">
+        <div class="page-heading"><div><div class="eyebrow">SYSTEM / MAINTENANCE</div><h1>Administration</h1><p class="page-subtitle">Projection controls for the event-sourced read models.</p></div></div>
+        <div class="admin-row">
+          <div><span class="section-kicker">READ MODEL</span><h2>Rebuild projections</h2><p>Clears the resource, reservation, and utilization projections, then replays events from the event store. Queries may return incomplete results while replay runs.</p></div>
+          <button class="button button-danger" id="rebuild-button" type="button">↻ &nbsp; Rebuild projections</button>
+        </div>
+        <div class="admin-note"><span class="note-mark">i</span><p>This operation requires an administrator account and returns as soon as event replay begins.</p></div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="modal-backdrop" id="connection-modal">
+    <section class="connection-dialog" role="dialog" aria-modal="true" aria-labelledby="connection-title">
+      <div class="dialog-mark">F</div><div class="eyebrow">FIELDNOTE / API ACCESS</div><h2 id="connection-title">Connect to workspace</h2><p class="dialog-copy">Sign in with your API credentials. The password stays in this browser session.</p>
+      <form id="connection-form" class="connection-form">
+        <label>Username<input name="username" autocomplete="username" value="admin" required></label>
+        <label>Password<input name="password" type="password" autocomplete="current-password" value="admin" required></label>
+        <label>Actor UUID <span class="label-note">used for commands</span><div class="actor-field"><input name="actorId" id="actor-id-input" required><button class="text-button" id="new-actor" type="button">Generate</button></div></label>
+        <button class="button button-primary button-wide" type="submit">Connect <span>→</span></button>
+        <div class="form-error" id="connection-error"></div>
+      </form>
+      <p class="dialog-footnote">Basic authentication · same-origin API</p>
+    </section>
+  </div>
+
+  <div class="modal-backdrop hidden" id="resource-modal">
+    <section class="form-dialog" role="dialog" aria-modal="true" aria-labelledby="resource-modal-title">
+      <button class="modal-close" data-close-resource type="button" aria-label="Close">×</button>
+      <div class="eyebrow">INVENTORY / NEW ENTRY</div><h2 id="resource-modal-title">Create resource</h2>
+      <form id="create-resource-form" class="stack-form">
+        <label>Name<input name="name" maxlength="120" required></label>
+        <label>Description<textarea name="description" rows="3"></textarea></label>
+        <div class="form-pair"><label>Capacity<input name="capacity" type="number" min="1" value="1" required></label><label>Location<input name="location" required></label></div>
+        <div class="dialog-actions"><button class="button button-quiet" data-close-resource type="button">Cancel</button><button class="button button-primary" type="submit">Create resource</button></div>
+      </form>
+    </section>
+  </div>
+
+  <script src="/console.js" defer></script>
+</body>
+</html>
