@@ -59,6 +59,10 @@ All REST endpoints require HTTP Basic authentication. Use the default credential
 - Username: admin
 - Password: admin
 
+## Web console
+
+Open the application root (for example, http://localhost:8080) to manage resources and reservations, inspect reservation events, view daily utilization, and rebuild projections. The console asks for API credentials and an actor UUID; the password is kept only in the current page session.
+
 OpenAPI documentation is available at:
 
 - Swagger UI: http://localhost:8080/docs
