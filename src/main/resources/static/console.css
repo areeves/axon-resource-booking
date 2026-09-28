@@ -21,9 +21,9 @@
 
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; background: var(--paper); color: var(--ink); font: 14px/1.5 var(--body); }
-button, input, textarea { font: inherit; }
+button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
-button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid #8cbda0; outline-offset: 2px; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid #8cbda0; outline-offset: 2px; }
 .app-shell { min-height: 100vh; }
 .rail { position: fixed; inset: 0 auto 0 0; z-index: 5; display: flex; width: 236px; flex-direction: column; padding: 27px 16px 18px; color: #e8f2ec; background: var(--forest-deep); }
 .brand { display: flex; align-items: center; gap: 11px; padding: 0 9px 31px; color: inherit; text-decoration: none; }
@@ -74,7 +74,7 @@ h1 { margin: 7px 0 4px; font: 700 31px/1.15 var(--display); letter-spacing: 0; }
 .filter-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 23px; border: 1px solid #e0e7e1; border-left: 3px solid #8eaf7a; border-radius: 4px; padding: 12px 14px; background: #edf2ec; }
 .filter-label { margin-right: 4px; color: #63786c; font: 500 9px var(--mono); letter-spacing: 1px; }
 .filter-bar label { display: flex; align-items: center; gap: 8px; color: #66766e; font-size: 11px; }
-input, textarea { min-width: 0; border: 1px solid #dce4de; border-radius: 3px; padding: 9px 10px; color: var(--ink); background: white; }
+input, select, textarea { min-width: 0; border: 1px solid #dce4de; border-radius: 3px; padding: 9px 10px; color: var(--ink); background: white; }
 input::placeholder, textarea::placeholder { color: #a4afa8; }
 .filter-bar input { width: 190px; padding: 7px 8px; font: 11px var(--mono); }
 .text-button { border: 0; padding: 7px; color: #517363; background: transparent; font-size: 11px; font-weight: 600; }
@@ -101,7 +101,7 @@ input::placeholder, textarea::placeholder { color: #a4afa8; }
 .lookup-form { padding: 15px 18px 17px; background: #fafbf9; }
 .lookup-form label { display: block; margin-bottom: 7px; color: #78877f; font: 9px var(--mono); letter-spacing: 1px; }
 .inline-field { display: flex; gap: 7px; }
-.inline-field input { width: 100%; padding: 8px; font: 10px var(--mono); }
+.inline-field input, .inline-field select { width: 100%; padding: 8px; font: 10px var(--mono); }
 .inline-field .icon-button { height: auto; color: white; border-color: var(--forest); background: var(--forest); }
 .empty-state { padding: 26px 18px; color: #89968e; font-size: 12px; text-align: center; }
 .empty-detail { display: grid; min-height: 430px; place-content: center; justify-items: center; text-align: center; }
@@ -136,7 +136,7 @@ input::placeholder, textarea::placeholder { color: #a4afa8; }
 .query-form { max-width: 760px; padding: 20px 0 27px; }
 .query-input-label { display: block; margin-bottom: 6px; color: #7a8980; font: 9px var(--mono); letter-spacing: 1px; }
 .query-controls { display: flex; gap: 9px; }
-.query-controls input { flex: 1; }
+.query-controls input, .query-controls select { flex: 1; }
 .results-section, .utilization-results { border-top: 1px solid var(--line); padding-top: 23px; }
 .result-count { color: #77867d; font: 10px var(--mono); }
 .reservation-table-wrap, .utilization-table-wrap { overflow-x: auto; margin-top: 14px; border: 1px solid var(--line); border-radius: 4px; background: white; }
@@ -151,7 +151,7 @@ td code { display: inline-block; max-width: 160px; overflow: hidden; color: #627
 .json-output { overflow: auto; max-height: 380px; margin-top: 12px; border: 1px solid var(--line); border-radius: 4px; padding: 15px; color: #d9ecdc; background: #17342f; font: 11px/1.6 var(--mono); }
 .hidden { display: none !important; }
 .utilization-form { display: grid; grid-template-columns: minmax(230px, 1.6fr) minmax(150px, 1fr) minmax(150px, 1fr) auto; align-items: end; gap: 12px; margin: 2px 0 30px; padding: 17px; border: 1px solid var(--line); border-radius: 4px; background: white; }
-.utilization-form input { width: 100%; }
+.utilization-form input, .utilization-form select { width: 100%; }
 .utilization-results h2 { overflow-wrap: anywhere; }
 .util-bar { display: flex; align-items: center; gap: 9px; min-width: 125px; }
 .util-track { width: 74px; height: 6px; overflow: hidden; border-radius: 8px; background: #e9efea; }
