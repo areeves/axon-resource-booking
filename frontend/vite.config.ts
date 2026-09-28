@@ -8,7 +8,7 @@ export default defineConfig({
     outDir: '../target/classes/static/app',
     emptyOutDir: true,
     rollupOptions: {
-      input: 'src/main.js',
+      input: 'src/main.ts',
       output: {
         entryFileNames: 'app.js',
         chunkFileNames: 'assets/[name]-[hash].js',
