@@ -15,6 +15,7 @@ const state = ref({
   queryType: 'user',
   reservations: []
 });
+const activeResources = ref([]);
 const activeView = ref('resources');
 const resourceListTitle = ref('Active resources');
 const connectionModal = ref(true);
@@ -91,6 +92,7 @@ function initializeDates() {
 async function loadResources() {
   const result = await api('/resources');
   state.value.resources = result.data || [];
+  activeResources.value = [...state.value.resources];
   resourceListTitle.value = 'Active resources';
   if (!state.value.resources.some((item) => item.resourceId === state.value.selectedResourceId)) {
     state.value.selectedResourceId = state.value.resources[0]?.resourceId || null;
@@ -259,7 +261,7 @@ async function showUtilization(event) {
 
 function goToUtilization(resource) {
   activeView.value = 'utilization';
-  utilizationForm.value.resourceId = resource.resourceId;
+  utilizationForm.value.resourceId = resource.status === 'ACTIVE' ? resource.resourceId : '';
 }
 
 async function rebuildProjections() {
@@ -313,7 +315,7 @@ onMounted(initializeDates);
                 <span class="resource-item-meta"><span>{{ resource.location }}</span><span>·</span><span>Capacity {{ resource.capacity }}</span></span>
               </button>
             </div>
-            <form class="lookup-form" @submit.prevent="lookupResource"><label for="resource-lookup">LOOK UP BY ID</label><div class="inline-field"><input id="resource-lookup" v-model="lookupId" placeholder="Resource UUID" required><button class="icon-button" type="submit" aria-label="Look up resource">→</button></div></form>
+            <form class="lookup-form" @submit.prevent="lookupResource"><label for="resource-lookup">OPEN ACTIVE RESOURCE</label><div class="inline-field"><select id="resource-lookup" v-model="lookupId" required><option value="" disabled>Select a resource</option><option v-for="resource in activeResources" :key="resource.resourceId" :value="resource.resourceId">{{ resource.name }} · {{ resource.location }} · {{ resource.resourceId.slice(0, 8) }}…</option></select><button class="icon-button" type="submit" aria-label="Open resource">→</button></div></form>
           </section>
           <section class="resource-detail-panel">
             <template v-if="currentResource">
@@ -331,7 +333,7 @@ onMounted(initializeDates);
       <section v-else-if="activeView === 'reservations'" class="view active">
         <div class="page-heading"><div><div class="eyebrow">BOOKING / LOOKUP</div><h1>Reservations</h1><p class="page-subtitle">Find bookings by user, resource, or reservation ID.</p></div></div>
         <div class="query-tabs" role="tablist" aria-label="Reservation lookup type"><button v-for="item in [{ id: 'user', label: 'By user' }, { id: 'resource', label: 'By resource' }, { id: 'id', label: 'By reservation ID' }]" :key="item.id" class="query-tab" :class="{ active: state.queryType === item.id }" type="button" @click="setQueryType(item.id)">{{ item.label }}</button></div>
-        <form class="query-form" @submit.prevent="queryReservations"><label class="query-input-label">{{ queryLabel.label }}</label><div class="query-controls"><input v-model="reservationQuery[state.queryType]" :placeholder="queryLabel.placeholder" required><button class="button button-primary" type="submit">Search reservations <span>→</span></button></div></form>
+        <form class="query-form" @submit.prevent="queryReservations"><label class="query-input-label">{{ queryLabel.label }}</label><div class="query-controls"><select v-if="state.queryType === 'resource'" v-model="reservationQuery.resource" required><option value="" disabled>Select an active resource</option><option v-for="resource in activeResources" :key="resource.resourceId" :value="resource.resourceId">{{ resource.name }} · {{ resource.location }} · {{ resource.resourceId.slice(0, 8) }}…</option></select><input v-else v-model="reservationQuery[state.queryType]" :placeholder="queryLabel.placeholder" required><button class="button button-primary" type="submit">Search reservations <span>→</span></button></div></form>
         <section class="results-section"><div class="section-bar"><div><span class="section-kicker">QUERY RESULTS</span><h2>{{ reservationTitle }}</h2></div><span class="result-count">{{ reservationResultRan ? `${state.reservations.length} ${state.reservations.length === 1 ? 'record' : 'records'}` : '' }}</span></div>
           <div v-if="!state.reservations.length" class="empty-state">{{ reservationResultRan ? 'No reservations found for this query.' : 'Run a lookup to see reservation records.' }}</div>
           <div v-else class="reservation-table-wrap"><table><thead><tr><th>RESERVATION</th><th>RESOURCE</th><th>USER</th><th>START</th><th>END</th><th>STATUS</th><th>ACTIONS</th></tr></thead><tbody><tr v-for="reservation in state.reservations" :key="reservation.reservationId"><td><code :title="reservation.reservationId">{{ reservation.reservationId }}</code></td><td><code :title="reservation.resourceId">{{ reservation.resourceId }}</code></td><td><code :title="reservation.userId">{{ reservation.userId }}</code></td><td>{{ formatDate(reservation.start) }}</td><td>{{ formatDate(reservation.end) }}</td><td><span class="status-pill" :class="{ inactive: reservation.status === 'CANCELLED' }">{{ reservation.status }}</span></td><td><div class="row-actions"><button type="button" @click="loadEvents(reservation.reservationId)">Events</button><button v-if="reservation.status === 'PENDING'" type="button" @click="mutateReservation('confirm', reservation)">Confirm</button><button v-if="['PENDING', 'CONFIRMED'].includes(reservation.status)" type="button" @click="mutateReservation('cancel', reservation)">Cancel</button></div></td></tr></tbody></table></div>
@@ -341,7 +343,7 @@ onMounted(initializeDates);
 
       <section v-else-if="activeView === 'utilization'" class="view active">
         <div class="page-heading"><div><div class="eyebrow">CAPACITY / DAILY PROJECTION</div><h1>Utilization</h1><p class="page-subtitle">Review occupied hours and capacity across a date range.</p></div></div>
-        <form class="utilization-form" @submit="showUtilization"><label>Resource UUID<input v-model="utilizationForm.resourceId" placeholder="Select or paste a resource UUID" required></label><label>From<input v-model="utilizationForm.from" type="date" required></label><label>To<input v-model="utilizationForm.to" type="date" required></label><button class="button button-primary" type="submit">View utilization <span>→</span></button></form>
+        <form class="utilization-form" @submit="showUtilization"><label>Resource<select v-model="utilizationForm.resourceId" required><option value="" disabled>Select an active resource</option><option v-for="resource in activeResources" :key="resource.resourceId" :value="resource.resourceId">{{ resource.name }} · {{ resource.location }} · {{ resource.resourceId.slice(0, 8) }}…</option></select></label><label>From<input v-model="utilizationForm.from" type="date" required></label><label>To<input v-model="utilizationForm.to" type="date" required></label><button class="button button-primary" type="submit">View utilization <span>→</span></button></form>
         <section class="utilization-results"><div class="section-bar"><div><span class="section-kicker">DAILY BREAKDOWN</span><h2>{{ utilizationResultRan ? utilizationTitle : 'Select a resource and date range' }}</h2></div><span class="result-count">{{ utilizationResultRan ? `${utilizationRows.length} ${utilizationRows.length === 1 ? 'day' : 'days'} · ${utilizationResourceId.slice(0, 8)}…` : '' }}</span></div>
           <div v-if="!utilizationRows.length" class="empty-state">{{ utilizationResultRan ? 'No utilization records in this range.' : 'Utilization is shown in UTC. Date ranges can include up to 366 days.' }}</div>
           <div v-else class="utilization-table-wrap"><table><thead><tr><th>UTC DATE</th><th>RESERVATIONS</th><th>OCCUPIED HOURS</th><th>CAPACITY USED</th></tr></thead><tbody><tr v-for="row in utilizationRows" :key="row.date"><td>{{ row.date }}</td><td>{{ row.reservationCount }}</td><td>{{ row.occupiedHours }} h</td><td><div class="util-bar"><span class="util-track"><span class="util-fill" :style="{ width: `${Math.min(100, Math.max(0, Number(row.utilizationPercent) || 0))}%` }"></span></span><span class="util-value">{{ Number(row.utilizationPercent || 0).toFixed(2) }}%</span></div></td></tr></tbody></table></div>
