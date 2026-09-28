@@ -118,6 +118,7 @@ input::placeholder, textarea::placeholder { color: #a4afa8; }
 .resource-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px 17px; padding: 19px 0; }
 .resource-fields label, .stack-form label, .utilization-form label, .connection-form label { display: grid; gap: 6px; color: #6f7e76; font-size: 11px; font-weight: 600; }
 .resource-fields label:first-child { grid-column: 1 / -1; }
+.resource-fields .detail-save-button { grid-column: 1 / -1; justify-self: end; }
 .resource-fields input, .resource-fields textarea { width: 100%; }
 .resource-fields input[readonly] { color: #738178; background: #f6f8f5; }
 .resource-fields textarea { resize: vertical; }
