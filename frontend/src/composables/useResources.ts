@@ -1,4 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query';
+import { useApi } from './useApi';
+import type { NewResourceDraft, Resource } from '../types';
 
 export function useResources() {
   const { api, isAuthenticated } = useApi();
@@ -11,10 +13,16 @@ export function useResources() {
   });
 
   const create = useMutation({
-    mutationFn: (input: NewResource) =>
-      api<Resource>('/resources', { method: 'POST', body: input }),
+    mutationFn: (input: NewResourceDraft) =>
+      api<Resource>('/resources', { method: 'POST', body: input, userScoped: true }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['resources'] })
   });
 
-  return { resources: query.data, isLoading: query.isPending, error: query.error, create };
+  return {
+    resources: query.data,
+    isLoading: query.isPending,
+    error: query.error,
+    refresh: () => query.refetch(),
+    create
+  };
 }
