@@ -4,6 +4,8 @@ import AdministrationView from './AdministrationView.vue';
 import ReservationsView from './ReservationsView.vue';
 import ResourcesView from './ResourcesView.vue';
 import UtilizationView from './UtilizationView.vue';
+import { useApi } from './composables/useApi';
+import { useResources } from './composables/useResources';
 import type {
   AppState,
   ConnectionForm,
@@ -27,9 +29,11 @@ const views = [
  ] as const;
 type ViewId = (typeof views)[number]['id'];
 
+const { api, actorId, setCredentials, setActorId } = useApi();
+const resourceOperations = useResources();
 const state = ref<AppState>({
   credentials: null,
-  actorId: localStorage.getItem('fieldnote-actor-id') || crypto.randomUUID(),
+  actorId: actorId.value,
   resources: [],
   selectedResourceId: null,
   queryType: 'user',
@@ -96,11 +100,6 @@ const reservationTitle = computed(() => {
   return 'Reservation record';
 });
 
-interface ApiOptions extends Omit<RequestInit, 'body'> {
-  body?: unknown;
-  userScoped?: boolean;
-}
-
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -111,43 +110,6 @@ function notify(message: string, error = false): void {
   toastTimer = setTimeout(() => {
     toast.value.visible = false;
   }, 3600);
-}
-
-async function api<T>(path: string, options: ApiOptions = {}): Promise<{ data: T; status: number }> {
-  if (!state.value.credentials) throw new Error('Connect to the API before continuing.');
-  const { body, userScoped, ...requestOptions } = options;
-  const headers = new Headers(requestOptions.headers);
-  headers.set('Accept', 'application/json');
-  const { username, password } = state.value.credentials;
-  headers.set('Authorization', `Basic ${btoa(`${username}:${password}`)}`);
-  if (userScoped) headers.set('X-User-Id', state.value.actorId);
-  if (body !== undefined) headers.set('Content-Type', 'application/json');
-
-  const response = await fetch(path, {
-    ...requestOptions,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body)
-  });
-  const text = await response.text();
-  let data: unknown = null;
-  if (text) {
-    try {
-      data = JSON.parse(text) as unknown;
-    } catch {
-      data = text;
-    }
-  }
-
-  if (!response.ok) {
-    const record = typeof data === 'object' && data !== null
-      ? data as Record<string, unknown>
-      : null;
-    const detail = record?.message ?? record?.error ?? data;
-    const message = typeof detail === 'string' ? detail : JSON.stringify(detail);
-    throw new Error(message || `${response.status} ${response.statusText}`);
-  }
-
-  return { data: data as T, status: response.status };
 }
 
 function toLocalInput(date: Date): string {
@@ -166,7 +128,8 @@ function initializeDates(): void {
 }
 
 async function loadResources(): Promise<void> {
-  const result = await api<Resource[]>('/resources');
+  const result = await resourceOperations.refresh();
+  if (result.error) throw result.error;
   state.value.resources = result.data ?? [];
   activeResources.value = [...state.value.resources];
   resourceListTitle.value = 'Active resources';
@@ -199,9 +162,10 @@ async function connect(): Promise<void> {
   connectionError.value = '';
   state.value.actorId = connection.value.actorId.trim();
   state.value.credentials = { username: connection.value.username, password: connection.value.password };
+  setCredentials(state.value.credentials);
   try {
     await api<Resource[]>('/resources');
-    localStorage.setItem('fieldnote-actor-id', state.value.actorId);
+    setActorId(state.value.actorId);
     connected.value = true;
     connectionModal.value = false;
     await loadResources();
@@ -209,6 +173,7 @@ async function connect(): Promise<void> {
     notify('Connected to the resource booking API.');
   } catch (error) {
     state.value.credentials = null;
+    setCredentials(null);
     const message = errorMessage(error);
     const rejected = message.includes('401') || message.includes('403');
     connectionError.value = rejected ? 'Credentials were not accepted.' : message;
@@ -423,11 +388,7 @@ async function createResource(event: SubmitEvent): Promise<void> {
   };
 
   await runAction(
-    () => api<unknown>('/resources', {
-      method: 'POST',
-      userScoped: true,
-      body
-    }),
+    () => resourceOperations.create.mutateAsync(body),
     'Resource created',
     async () => {
       newResource.value = {
