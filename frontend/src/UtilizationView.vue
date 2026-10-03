@@ -1,18 +1,67 @@
 <script setup lang="ts">
+import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { useApi } from './composables/useApi';
+import { useResources } from './composables/useResources';
+import { useToast } from './composables/useToast';
 import type { Resource, UtilizationForm, UtilizationRow } from './types';
 
-defineProps<{
-  activeResources: Resource[];
-  utilizationForm: UtilizationForm;
-  utilizationResultRan: boolean;
-  utilizationTitle: string;
-  utilizationRows: UtilizationRow[];
-  utilizationResourceId: string;
+const props = defineProps<{
+  initialResourceId: string;
+  selectionVersion: number;
 }>();
+const { api } = useApi();
+const { resources } = useResources();
+const { notify } = useToast();
+const activeResources = computed<Resource[]>(() =>
+  (resources.value ?? []).filter((resource) => resource.status === 'ACTIVE')
+);
+const utilizationForm = reactive<UtilizationForm>({
+  resourceId: props.initialResourceId,
+  from: '',
+  to: ''
+});
+const utilizationResultRan = ref(false);
+const utilizationTitle = ref('Select a resource and date range');
+const utilizationRows = ref<UtilizationRow[]>([]);
+const utilizationResourceId = ref('');
 
-const emit = defineEmits<{
-  (event: 'show-utilization', formEvent: SubmitEvent): void;
-}>();
+async function showUtilization(event: SubmitEvent): Promise<void> {
+  event.preventDefault();
+  const { resourceId, from, to } = utilizationForm;
+  try {
+    const query = new URLSearchParams({ from, to });
+    const path = `/resources/${encodeURIComponent(resourceId.trim())}/utilization?${query}`;
+    const result = await api<UtilizationRow[]>(path);
+    utilizationRows.value = result.data ?? [];
+    utilizationResourceId.value = resourceId;
+    utilizationResultRan.value = true;
+    if (utilizationRows.value.length === 0) {
+      utilizationTitle.value = 'No dates';
+      return;
+    }
+    const lastDate = utilizationRows.value.at(-1)?.date;
+    utilizationTitle.value = utilizationRows.value.length > 1
+      ? `${utilizationRows.value[0].date} to ${lastDate}`
+      : utilizationRows.value[0].date;
+  } catch (error) {
+    notify(error instanceof Error ? error.message : String(error), true);
+  }
+}
+
+function initializeDates(): void {
+  const today = new Date().toISOString().slice(0, 10);
+  utilizationForm.from = today;
+  utilizationForm.to = today;
+}
+
+watch(
+  () => [props.initialResourceId, props.selectionVersion] as const,
+  ([resourceId]) => {
+    utilizationForm.resourceId = resourceId;
+  }
+);
+
+onMounted(initializeDates);
 
 function utilizationWidth(percent: number): string {
   const boundedPercent = Math.min(100, Math.max(0, Number(percent) || 0));
@@ -39,7 +88,7 @@ function formatResultCount(rowCount: number, resourceId: string): string {
       </div>
     </div>
 
-    <form class="utilization-form" @submit="emit('show-utilization', $event)">
+    <form class="utilization-form" @submit="showUtilization">
       <label>
         Resource
         <select v-model="utilizationForm.resourceId" required>
