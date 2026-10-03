@@ -1,9 +1,28 @@
 <script setup lang="ts">
-defineProps<{ busy: boolean }>();
+import { ref } from 'vue';
+import { useApi } from './composables/useApi';
+import { useToast } from './composables/useToast';
 
-const emit = defineEmits<{
-  (event: 'rebuild-projections'): void;
-}>();
+const { api } = useApi();
+const { notify } = useToast();
+const busy = ref(false);
+
+async function rebuildProjections(): Promise<void> {
+  const confirmed = window.confirm(
+    'Rebuild all projections from the event store? The current read models will be cleared while events replay.'
+  );
+  if (!confirmed) return;
+
+  busy.value = true;
+  try {
+    await api<unknown>('/admin/projections/rebuild', { method: 'POST' });
+    notify('Projection rebuild started. Queries may be incomplete during replay.');
+  } catch (error) {
+    notify(error instanceof Error ? error.message : String(error), true);
+  } finally {
+    busy.value = false;
+  }
+}
 </script>
 
 <template>
@@ -29,7 +48,7 @@ const emit = defineEmits<{
         class="button button-danger"
         type="button"
         :disabled="busy"
-        @click="emit('rebuild-projections')"
+        @click="rebuildProjections"
       >
         ↻ &nbsp; Rebuild projections
       </button>

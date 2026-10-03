@@ -1,37 +1,147 @@
 <script setup lang="ts">
+import { computed, reactive, ref, watch } from 'vue';
+import { useApi } from './composables/useApi';
+import { useResources } from './composables/useResources';
+import { useToast } from './composables/useToast';
 import type {
   AppState,
   QueryOption,
   QueryType,
-  Reservation,
-  ReservationQuery,
-  Resource
+  Reservation
 } from './types';
 
+const props = defineProps<{ refreshKey: number }>();
 const queryTabs = [
   { id: 'user', label: 'By user' },
   { id: 'resource', label: 'By resource' },
   { id: 'id', label: 'By reservation ID' }
 ] as const;
 
-defineProps<{
-  state: AppState;
-  activeResources: Resource[];
-  queryLabel: QueryOption;
-  reservationTitle: string;
-  reservationQuery: ReservationQuery;
-  reservationResultRan: boolean;
-  eventData: unknown;
-  formatDate: (value: string) => string;
-}>();
+const { api, actorId } = useApi();
+const { resources } = useResources();
+const { notify } = useToast();
+const state = reactive<AppState>({
+  credentials: null,
+  actorId: actorId.value,
+  resources: [],
+  selectedResourceId: null,
+  queryType: 'user',
+  reservations: []
+});
+const activeResources = computed(() =>
+  (resources.value ?? []).filter((resource) => resource.status === 'ACTIVE')
+);
+const reservationQuery = reactive({ user: actorId.value, resource: '', id: '' });
+const reservationResultRan = ref(false);
+const eventData = ref<unknown>(null);
+const queryOptions: Record<QueryType, QueryOption> = {
+  user: { label: 'USER UUID', placeholder: 'User UUID' },
+  resource: { label: 'RESOURCE UUID', placeholder: 'Resource UUID' },
+  id: { label: 'RESERVATION UUID', placeholder: 'Reservation UUID' }
+};
+const queryLabel = computed(() => queryOptions[state.queryType]);
+const reservationTitle = computed(() => {
+  if (state.queryType === 'user') return 'User reservations';
+  if (state.queryType === 'resource') return 'Resource reservations';
+  return 'Reservation record';
+});
 
-const emit = defineEmits<{
-  (event: 'set-query-type', type: QueryType): void;
-  (event: 'query-reservations'): void;
-  (event: 'load-events', reservationId: string): void;
-  (event: 'reservation-action', operation: 'confirm' | 'cancel', reservation: Reservation): void;
-  (event: 'close-events'): void;
-}>();
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function setQueryType(type: QueryType): void {
+  state.queryType = type;
+  reservationQuery[type] = type === 'user' ? actorId.value : '';
+  reservationResultRan.value = false;
+  state.reservations = [];
+}
+
+async function queryReservations(): Promise<void> {
+  const value = reservationQuery[state.queryType].trim();
+  if (!value) return;
+  const paths: Record<QueryType, string> = {
+    user: `/reservations/users/${encodeURIComponent(value)}`,
+    resource: `/reservations/resources/${encodeURIComponent(value)}`,
+    id: `/reservations/${encodeURIComponent(value)}`
+  };
+  try {
+    if (state.queryType === 'id') {
+      const result = await api<Reservation | null>(paths.id);
+      state.reservations = result.data ? [result.data] : [];
+      if (!result.data) notify('Reservation was not found.', true);
+    } else {
+      const result = await api<Reservation[]>(paths[state.queryType]);
+      state.reservations = result.data ?? [];
+    }
+    reservationResultRan.value = true;
+  } catch (error) {
+    notify(errorMessage(error), true);
+  }
+}
+
+async function loadEvents(reservationId: string): Promise<void> {
+  try {
+    const result = await api<unknown>(
+      `/reservations/${encodeURIComponent(reservationId)}/events`
+    );
+    eventData.value = result.data;
+    requestAnimationFrame(() => {
+      document.querySelector('.event-section')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      });
+    });
+  } catch (error) {
+    notify(errorMessage(error), true);
+  }
+}
+
+async function mutateReservation(
+  operation: 'confirm' | 'cancel',
+  reservation: Reservation
+): Promise<void> {
+  const message = operation === 'confirm'
+    ? 'Reservation confirmed'
+    : 'Reservation cancelled';
+  await runAction(
+    () => api<unknown>(
+      `/resources/${reservation.resourceId}/reservations/${reservation.reservationId}/${operation}`,
+      { method: 'POST', userScoped: true }
+    ),
+    message,
+    queryReservations
+  );
+}
+
+async function runAction(
+  action: () => Promise<unknown>,
+  message: string,
+  after?: () => Promise<void>
+): Promise<void> {
+  try {
+    await action();
+    notify(message);
+    if (after) await after();
+  } catch (error) {
+    notify(errorMessage(error), true);
+  }
+}
+
+function formatDate(value: string): string {
+  return new Date(value).toLocaleString();
+}
+
+watch(actorId, (id) => {
+  state.actorId = id;
+  reservationQuery.user = id;
+});
+watch(() => props.refreshKey, (key, previousKey) => {
+  if (key !== previousKey) {
+    setQueryType('user');
+    void queryReservations();
+  }
+});
 </script>
 
 <template>
@@ -51,13 +161,13 @@ const emit = defineEmits<{
         class="query-tab"
         :class="{ active: state.queryType === item.id }"
         type="button"
-        @click="emit('set-query-type', item.id)"
+        @click="setQueryType(item.id)"
       >
         {{ item.label }}
       </button>
     </div>
 
-    <form class="query-form" @submit.prevent="emit('query-reservations')">
+    <form class="query-form" @submit.prevent="queryReservations">
       <label class="query-input-label">{{ queryLabel.label }}</label>
       <div class="query-controls">
         <select
@@ -140,21 +250,21 @@ const emit = defineEmits<{
                 <div class="row-actions">
                   <button
                     type="button"
-                    @click="emit('load-events', reservation.reservationId)"
+                    @click="loadEvents(reservation.reservationId)"
                   >
                     Events
                   </button>
                   <button
                     v-if="reservation.status === 'PENDING'"
                     type="button"
-                    @click="emit('reservation-action', 'confirm', reservation)"
+                    @click="mutateReservation('confirm', reservation)"
                   >
                     Confirm
                   </button>
                   <button
                     v-if="['PENDING', 'CONFIRMED'].includes(reservation.status)"
                     type="button"
-                    @click="emit('reservation-action', 'cancel', reservation)"
+                    @click="mutateReservation('cancel', reservation)"
                   >
                     Cancel
                   </button>
@@ -176,7 +286,7 @@ const emit = defineEmits<{
           class="icon-button"
           type="button"
           aria-label="Close event history"
-          @click="emit('close-events')"
+          @click="eventData = null"
         >
           ×
         </button>
