@@ -25,7 +25,7 @@ A Spring Boot application demonstrating CQRS + event sourcing with Axon for reso
 docker compose up --build
 ```
 
-The Compose startup builds the Vue console before starting Spring Boot. The application listens on port 8080 and PostgreSQL listens on 5432.
+Docker Compose builds the Vue console as a separate Nginx image and runs the Spring Boot API in its own container. Open the console at http://localhost; Nginx proxies its API requests to the API container. The API is also available directly at http://localhost:8080, and PostgreSQL listens on port 5432.
 The Compose configuration enables sample resources and future reservations on startup. Sample data is created through Axon commands and is not duplicated when the app restarts.
 
 To rebuild the database from scratch and repopulate the sample data:

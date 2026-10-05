@@ -1,5 +1,5 @@
 services:
-  app:
+  api:
     build:
       context: .
       dockerfile: .devcontainer/Dockerfile
@@ -20,6 +20,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - api
 
   postgres:
     image: postgres:16-alpine
