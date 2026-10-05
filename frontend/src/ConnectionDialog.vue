@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { useApi } from './composables/useApi';
+import { createActorId, useApi } from './composables/useApi';
 import type { ConnectionForm, Resource } from './types';
 
 defineProps<{ modelValue: boolean; connected: boolean }>();
@@ -43,7 +43,7 @@ async function connect(): Promise<void> {
 }
 
 function generateActor(): void {
-  connection.value.actorId = crypto.randomUUID();
+  connection.value.actorId = createActorId();
 }
 
 </script>

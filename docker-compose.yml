@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: .devcontainer/Dockerfile
-    command: ./mvnw spring-boot:run
+    command: ./mvnw generate-resources spring-boot:run
     working_dir: /workspaces/axon-resource-booking
     ports:
       - "8080:8080"
