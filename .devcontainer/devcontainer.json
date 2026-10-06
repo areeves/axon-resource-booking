@@ -1,15 +1,19 @@
 {
   "name": "Axon Resource Booking",
   "dockerComposeFile": "../docker-compose.yml",
-  "service": "app",
+  "service": "api",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   "shutdownAction": "stopCompose",
   "overrideCommand": false,
   "remoteUser": "vscode",
-  "forwardPorts": [8080, 5432],
+  "forwardPorts": [80, 8080, 5432],
   "portsAttributes": {
     "8080": {
       "label": "Spring Boot application",
+      "onAutoForward": "notify"
+    },
+    "80": {
+      "label": "Vue development server",
       "onAutoForward": "notify"
     },
     "5432": {

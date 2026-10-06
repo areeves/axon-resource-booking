@@ -3,13 +3,13 @@ services:
     build:
       context: .
       dockerfile: .devcontainer/Dockerfile
-    command: ./mvnw generate-resources spring-boot:run
+    command: sh ./scripts/dev-api.sh
     working_dir: /workspaces/axon-resource-booking
     ports:
       - "8080:8080"
     volumes:
       - .:/workspaces/axon-resource-booking:cached
-      - maven-cache:/root/.m2
+      - maven-cache:/home/vscode/.m2
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/axon_resource_booking
       DB_USERNAME: postgres
@@ -22,11 +22,14 @@ services:
         condition: service_healthy
 
   frontend:
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile
+    image: node:22-alpine
+    working_dir: /workspace/frontend
+    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0"
     ports:
-      - "80:80"
+      - "80:5173"
+    volumes:
+      - ./frontend:/workspace/frontend:cached
+      - frontend-node-modules:/workspace/frontend/node_modules
     depends_on:
       - api
 
@@ -47,5 +50,6 @@ services:
       - postgres-data:/var/lib/postgresql/data
 
 volumes:
+  frontend-node-modules:
   maven-cache:
   postgres-data:

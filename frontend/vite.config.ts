@@ -1,9 +1,19 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [vue()],
-  base: '/app/',
+  base: command === 'serve' ? '/' : '/app/',
+  server: {
+    host: '0.0.0.0',
+    proxy: {
+      '/resources': 'http://api:8080',
+      '/reservations': 'http://api:8080',
+      '/admin': 'http://api:8080',
+      '/actuator': 'http://api:8080',
+      '/console.css': 'http://api:8080'
+    }
+  },
   build: {
     outDir: '../target/classes/static/app',
     emptyOutDir: true,
@@ -16,4 +26,4 @@ export default defineConfig({
       }
     }
   }
-});
+}));
