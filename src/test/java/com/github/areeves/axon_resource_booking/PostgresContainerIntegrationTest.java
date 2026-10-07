@@ -14,7 +14,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-@SpringBootTest
+@SpringBootTest(properties = "app.sample-data.enabled=false")
 @Testcontainers(disabledWithoutDocker = true)
 class PostgresContainerIntegrationTest {
 

@@ -3,7 +3,7 @@ package com.github.areeves.axon_resource_booking;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest
+@SpringBootTest(properties = "app.sample-data.enabled=false")
 class AxonResourceBookingApplicationTests {
 
 	@Test
