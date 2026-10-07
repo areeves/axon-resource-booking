@@ -28,6 +28,7 @@ import static org.awaitility.Awaitility.await;
 
 @SpringBootTest(properties = "app.sample-data.enabled=false")
 @AutoConfigureMockMvc
+@org.springframework.test.annotation.DirtiesContext(classMode = org.springframework.test.annotation.DirtiesContext.ClassMode.BEFORE_EACH_TEST_METHOD)
 class ResourceControllerIntegrationTest {
 
 	@Autowired
@@ -117,6 +118,37 @@ class ResourceControllerIntegrationTest {
 						{"userId":"%s","start":"%s","end":"%s"}
 						""".formatted(UUID.randomUUID(), Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200))))
 				.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void allowsReservationUserIdentityFromHeaderWithoutPayloadUserId() throws Exception {
+		UUID userId = UUID.randomUUID();
+		Instant start = Instant.now().plusSeconds(3600);
+		Instant end = start.plusSeconds(3600);
+
+		var createResult = mockMvc.perform(post("/resources")
+				.with(httpBasic("admin", "admin"))
+				.header("X-User-Id", userId)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"name":"Header User Room","description":"Training room","capacity":4,"location":"Floor 1"}
+						"""))
+				.andExpect(request().asyncStarted())
+				.andReturn();
+		String location = mockMvc.perform(asyncDispatch(createResult)).andReturn().getResponse().getHeader("Location");
+		UUID resourceId = UUID.fromString(location.substring(location.lastIndexOf('/') + 1));
+
+		var reserveResult = mockMvc.perform(post("/resources/{resourceId}/reservations", resourceId)
+				.with(httpBasic("admin", "admin"))
+				.header("X-User-Id", userId)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"start":"%s","end":"%s"}
+						""".formatted(start, end)))
+				.andExpect(request().asyncStarted())
+				.andReturn();
+
+		mockMvc.perform(asyncDispatch(reserveResult)).andExpect(status().isCreated());
 	}
 
 	@Test

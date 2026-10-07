@@ -5,5 +5,5 @@ import java.util.UUID;
 
 import jakarta.validation.constraints.NotNull;
 
-public record ReserveResourceRequest(@NotNull UUID userId, @NotNull Instant start, @NotNull Instant end) {
+public record ReserveResourceRequest(UUID userId, @NotNull Instant start, @NotNull Instant end) {
 }
