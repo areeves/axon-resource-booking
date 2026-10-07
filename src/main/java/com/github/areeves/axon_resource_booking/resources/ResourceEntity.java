@@ -3,6 +3,9 @@ package com.github.areeves.axon_resource_booking.resources;
 import java.time.Instant;
 import java.util.UUID;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -38,6 +41,11 @@ public class ResourceEntity {
 	@Column(nullable = false)
 	private Instant lastModifiedAt;
 
+	@Column(name = "availability_rules", columnDefinition = "TEXT")
+	private String availabilityRules;
+
+	private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();
+
 	protected ResourceEntity() {
 	}
 
@@ -51,6 +59,7 @@ public class ResourceEntity {
 		this.status = status;
 		this.createdAt = createdAt;
 		this.lastModifiedAt = createdAt;
+		this.availabilityRules = serialize(ResourceAvailabilityRules.empty());
 	}
 
 	public static ResourceEntity from(ResourceCreatedEvent event) {
@@ -90,6 +99,19 @@ public class ResourceEntity {
 		return lastModifiedAt;
 	}
 
+	public ResourceAvailabilityRules getAvailabilityRules() {
+		try {
+			return deserialize(availabilityRules);
+		} catch (RuntimeException ex) {
+			return ResourceAvailabilityRules.empty();
+		}
+	}
+
+	public void setAvailabilityRules(ResourceAvailabilityRules rules) {
+		this.availabilityRules = serialize(rules == null ? ResourceAvailabilityRules.empty() : rules);
+		this.lastModifiedAt = Instant.now();
+	}
+
 	public void apply(ResourceUpdatedEvent event) {
 		name = event.name();
 		description = event.description();
@@ -105,5 +127,27 @@ public class ResourceEntity {
 	public void apply(ResourceReactivatedEvent event) {
 		status = ResourceStatus.ACTIVE;
 		lastModifiedAt = event.lastModifiedAt();
+	}
+
+	private static String serialize(ResourceAvailabilityRules rules) {
+		if (rules == null) {
+			return null;
+		}
+		try {
+			return OBJECT_MAPPER.writeValueAsString(rules);
+		} catch (JsonProcessingException ex) {
+			throw new IllegalStateException("Failed to serialize availability rules", ex);
+		}
+	}
+
+	private static ResourceAvailabilityRules deserialize(String serialized) {
+		if (serialized == null || serialized.isBlank()) {
+			return ResourceAvailabilityRules.empty();
+		}
+		try {
+			return OBJECT_MAPPER.readValue(serialized, ResourceAvailabilityRules.class);
+		} catch (JsonProcessingException ex) {
+			throw new IllegalStateException("Failed to deserialize availability rules", ex);
+		}
 	}
 }
