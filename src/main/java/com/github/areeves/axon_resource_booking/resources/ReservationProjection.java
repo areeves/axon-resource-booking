@@ -27,6 +27,9 @@ public class ReservationProjection {
 	@EventHandler
 	public void on(ReservationCreatedEvent event) {
 		recordEvent("reservation_created", event.resourceId());
+		if (reservationRepository.existsById(event.reservationId())) {
+			return;
+		}
 		reservationRepository.save(ReservationEntity.from(event));
 		if (event.status() != ReservationStatus.CANCELLED) {
 			adjustUtilization(event.resourceId(), event.start(), event.end(), 1);

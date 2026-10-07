@@ -24,6 +24,9 @@ public class ResourceProjection {
 	@EventHandler
 	public void on(ResourceCreatedEvent event) {
 		recordEvent("resource_created", event.resourceId());
+		if (resourceRepository.existsById(event.resourceId())) {
+			return;
+		}
 		resourceRepository.save(ResourceEntity.from(event));
 	}
 
