@@ -81,14 +81,19 @@ backend capabilities and the shipped user-facing workflows.
 The project includes a Vue-based web console that is already implemented and used
 for day-to-day resource operations and system administration.
 
+These front-end features are intentionally designed to complement the backend
+API and event-sourced domain model: each interface workflow exposes and validates
+one or more backend capabilities, making the user-facing console a practical
+administrative layer over the underlying CQRS read models and command handlers.
+
 | ID     | Requirement                                                                 | Priority | Notes |
 |--------|-----------------------------------------------------------------------------|----------|-------|
-| FR-40  | Resource management dashboard exists in the console                         | Must     | Create, update, deactivate/reactivate, and inspect resources |
-| FR-41  | Users can find resources by active list and availability window              | Must     | Search for available resources across time ranges |
-| FR-42  | Reservation lookup and lifecycle actions are available in the UI            | Must     | Query by user, resource, or reservation ID; confirm/cancel records |
-| FR-43  | Daily utilization view is available in the console                          | Must     | Date-range reporting for occupied hours and capacity usage |
-| FR-44  | Administrative maintenance actions are available in the web console         | Must     | Rebuild projections from the event store |
-| FR-45  | The console supports API authentication and actor configuration             | Must     | User credentials and acting user are configured in-session |
+| FR-40  | Resource management dashboard exists in the console                         | Must     | Creates, updates, deactivates/reactivates, and inspects resources defined by FR-01 to FR-06 |
+| FR-41  | Users can find resources by active list and availability window              | Must     | Exposes FR-20 and FR-21 by searching for available resources across time ranges |
+| FR-42  | Reservation lookup and lifecycle actions are available in the UI            | Must     | Supports FR-10 to FR-14 and FR-22 to FR-25 by querying by user, resource, or reservation ID; confirm/cancel records |
+| FR-43  | Daily utilization view is available in the console                          | Must     | Mirrors read-side utilization queries and reporting for occupied hours and capacity usage |
+| FR-44  | Administrative maintenance actions are available in the web console         | Must     | Uses the backend rebuild projections workflow to support operational maintenance |
+| FR-45  | The console supports API authentication and actor configuration             | Must     | User credentials and acting user are configured in-session, matching the backend’s user identity requirement |
 
 The shipped console supports the following implemented workflows:
 - Create a new resource from a modal form and immediately reload the active list.
