@@ -129,6 +129,32 @@ input::placeholder, textarea::placeholder { color: #a4afa8; }
 .reserve-form-grid label { display: grid; gap: 5px; color: #738078; font-size: 10px; }
 .reserve-form-grid input { width: 100%; padding: 8px; font-size: 11px; }
 .reserve-form-grid .button { white-space: nowrap; }
+.availability-section { margin: 23px 0; border-top: 1px solid var(--line); padding-top: 18px; }
+.availability-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.availability-heading h3, .window-management h4 { margin: 0 0 4px; font: 700 13px var(--display); }
+.availability-heading p, .availability-note { margin: 0; color: var(--muted); font-size: 11px; }
+.weekly-availability-form { display: grid; gap: 12px; margin-top: 13px; }
+.weekly-availability-form label, .window-form label { display: grid; gap: 5px; color: #738078; font-size: 10px; }
+.timezone-field { max-width: 300px; }
+.weekly-days { border-top: 1px solid #edf0ed; }
+.weekly-day { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 10px; border-bottom: 1px solid #edf0ed; padding: 8px 0; }
+.weekly-day > strong { padding-top: 8px; color: #52675a; font-size: 11px; }
+.weekly-ranges { display: grid; gap: 5px; }
+.weekly-range { display: flex; align-items: center; gap: 7px; }
+.weekly-range input { width: 112px; padding: 6px; font: 10px var(--mono); }
+.weekly-range > span { color: var(--muted); font-size: 10px; }
+.weekly-range .text-button, .add-hours-button { padding: 5px; font-size: 10px; }
+.weekly-availability-form > .small-action { justify-self: end; }
+.window-management { margin-top: 18px; border-top: 1px solid #edf0ed; padding-top: 14px; }
+.window-form { display: grid; grid-template-columns: 1fr 1.4fr 1.4fr 1.2fr auto; align-items: end; gap: 8px; margin: 10px 0 12px; }
+.window-form input, .window-form select { width: 100%; padding: 7px; font-size: 10px; }
+.window-form > .small-action { min-height: 33px; white-space: nowrap; }
+.availability-windows { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.availability-windows li { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid #edf0ed; padding: 8px 0; color: #586c5e; font-size: 10px; }
+.availability-windows li > div { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.window-type { border-radius: 99px; padding: 2px 7px; color: #557250; background: #edf4e6; font: 9px var(--mono); }
+.window-type.blackout { color: #a24b3c; background: #fbefec; }
+.window-reason { color: var(--muted); font-style: italic; }
 .query-tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--line); }
 .query-tab { position: relative; border: 0; padding: 0 0 12px; color: #7d8a83; background: transparent; font-size: 12px; }
 .query-tab.active { color: var(--forest); font-weight: 700; }
@@ -234,6 +260,11 @@ td code { display: inline-block; max-width: 160px; overflow: hidden; color: #627
   .detail-heading { display: block; }
   .detail-actions { justify-content: flex-start; margin-top: 12px; }
   .resource-fields { gap: 10px; }
+  .weekly-day { grid-template-columns: 78px minmax(0, 1fr); }
+  .weekly-range { flex-wrap: wrap; }
+  .weekly-range input { width: 96px; }
+  .window-form { grid-template-columns: 1fr 1fr; }
+  .window-form > .small-action { justify-self: start; }
   .reserve-form-grid { grid-template-columns: 1fr 1fr; }
   .reserve-form-grid label:first-child { grid-column: 1 / -1; }
   .query-tabs { gap: 15px; overflow-x: auto; }

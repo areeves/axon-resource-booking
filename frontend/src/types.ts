@@ -41,6 +41,26 @@ export interface DateTimeRange {
   end: string;
 }
 
+export interface AvailabilityTimeRange {
+  start: string;
+  end: string;
+}
+
+export interface AvailabilityWindow {
+  windowId: string;
+  start: string;
+  end: string;
+  type: 'BLACKOUT' | 'EXTRA';
+  reason: string | null;
+}
+
+export interface ResourceAvailabilityRules {
+  timezone: string | null;
+  weeklyPattern: Record<string, AvailabilityTimeRange[]>;
+  blackouts: AvailabilityWindow[];
+  extras: AvailabilityWindow[];
+}
+
 export interface ConnectionForm {
   username: string;
   password: string;

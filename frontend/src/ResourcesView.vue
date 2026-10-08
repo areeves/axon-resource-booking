@@ -3,7 +3,15 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useApi } from './composables/useApi';
 import { useResources } from './composables/useResources';
 import { useToast } from './composables/useToast';
-import type { AppState, DateTimeRange, NewResourceDraft, Resource } from './types';
+import type {
+  AppState,
+  AvailabilityTimeRange,
+  AvailabilityWindow,
+  DateTimeRange,
+  NewResourceDraft,
+  Resource,
+  ResourceAvailabilityRules
+} from './types';
 
 const props = defineProps<{ connected: boolean }>();
 
@@ -32,6 +40,27 @@ const currentResource = computed<Resource | null>(() =>
 const resourceListTitle = ref('Active resources');
 const availability = ref<DateTimeRange>({ start: '', end: '' });
 const reservationWindow = ref<DateTimeRange>({ start: '', end: '' });
+const availabilityRules = ref<ResourceAvailabilityRules>({
+  timezone: null,
+  weeklyPattern: {},
+  blackouts: [],
+  extras: []
+});
+const weeklyTimezone = ref(Intl.DateTimeFormat().resolvedOptions().timeZone);
+const availabilityWindowDraft = ref<DateTimeRange>({ start: '', end: '' });
+const availabilityWindowReason = ref('');
+const availabilityWindowType = ref<'BLACKOUT' | 'EXTRA'>('BLACKOUT');
+const availabilityLoading = ref(false);
+let availabilityRequestId = 0;
+const weekdays = [
+  { name: 'MONDAY', label: 'Monday' },
+  { name: 'TUESDAY', label: 'Tuesday' },
+  { name: 'WEDNESDAY', label: 'Wednesday' },
+  { name: 'THURSDAY', label: 'Thursday' },
+  { name: 'FRIDAY', label: 'Friday' },
+  { name: 'SATURDAY', label: 'Saturday' },
+  { name: 'SUNDAY', label: 'Sunday' }
+] as const;
 const lookupId = ref('');
 const resourceModal = ref(false);
 const busy = ref(false);
@@ -56,6 +85,151 @@ function initializeDates(): void {
   availability.value.end = toLocalInput(new Date(now + 2 * 60 * 60 * 1000));
   reservationWindow.value.start = availability.value.start;
   reservationWindow.value.end = availability.value.end;
+}
+
+function emptyAvailabilityRules(): ResourceAvailabilityRules {
+  return { timezone: null, weeklyPattern: {}, blackouts: [], extras: [] };
+}
+
+async function loadAvailability(resourceId: string): Promise<void> {
+  const requestId = ++availabilityRequestId;
+  availabilityLoading.value = true;
+  availabilityRules.value = emptyAvailabilityRules();
+  try {
+    const result = await api<ResourceAvailabilityRules>(
+      `/resources/${encodeURIComponent(resourceId)}/availability`
+    );
+    if (requestId !== availabilityRequestId || currentResource.value?.resourceId !== resourceId) return;
+    const rules = result.data ?? emptyAvailabilityRules();
+    availabilityRules.value = {
+      timezone: rules.timezone ?? null,
+      weeklyPattern: Object.fromEntries(
+        Object.entries(rules.weeklyPattern ?? {}).map(([day, ranges]) => [
+          day,
+          ranges.map((range) => ({
+            start: range.start.slice(0, 5),
+            end: range.end.slice(0, 5)
+          }))
+        ])
+      ),
+      blackouts: [...(rules.blackouts ?? [])],
+      extras: [...(rules.extras ?? [])]
+    };
+    weeklyTimezone.value =
+      rules.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch (error) {
+    if (requestId === availabilityRequestId && currentResource.value?.resourceId === resourceId) {
+      notify(errorMessage(error), true);
+    }
+  } finally {
+    if (requestId === availabilityRequestId) availabilityLoading.value = false;
+  }
+}
+
+function addWeeklyRange(day: string): void {
+  availabilityRules.value.weeklyPattern[day] ??= [];
+  availabilityRules.value.weeklyPattern[day].push({ start: '09:00', end: '17:00' });
+}
+
+function removeWeeklyRange(day: string, index: number): void {
+  const ranges = availabilityRules.value.weeklyPattern[day];
+  if (!ranges) return;
+  ranges.splice(index, 1);
+  if (!ranges.length) delete availabilityRules.value.weeklyPattern[day];
+}
+
+async function saveWeeklyAvailability(): Promise<void> {
+  const resource = currentResource.value;
+  if (!resource) return;
+  const timezone = weeklyTimezone.value.trim();
+  try {
+    new Intl.DateTimeFormat(undefined, { timeZone: timezone });
+  } catch {
+    notify('Enter a valid IANA timezone, such as America/New_York.', true);
+    return;
+  }
+  const weeklyPattern: Record<string, AvailabilityTimeRange[]> = {};
+  for (const { name } of weekdays) {
+    const ranges = availabilityRules.value.weeklyPattern[name] ?? [];
+    for (const range of ranges) {
+      if (!range.start || !range.end || range.start === range.end) {
+        notify('Each weekly availability range must have different start and end times.', true);
+        return;
+      }
+    }
+    if (ranges.length) weeklyPattern[name] = ranges;
+  }
+  await runAction(
+    () => api<unknown>(`/resources/${resource.resourceId}/availability/weekly`, {
+      method: 'POST',
+      userScoped: true,
+      body: { timezone, weeklyPattern }
+    }),
+    'Weekly availability saved',
+    () => loadAvailability(resource.resourceId)
+  );
+}
+
+async function addAvailabilityWindow(): Promise<void> {
+  const resource = currentResource.value;
+  if (!resource) return;
+  const start = new Date(availabilityWindowDraft.value.start);
+  const end = new Date(availabilityWindowDraft.value.end);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) {
+    notify('End time must be after start time.', true);
+    return;
+  }
+  const isBlackout = availabilityWindowType.value === 'BLACKOUT';
+  const windowsPath = isBlackout ? 'blackouts' : 'extra';
+  const body = {
+    start: start.toISOString(),
+    end: end.toISOString(),
+    reason: availabilityWindowReason.value.trim() || null
+  };
+  await runAction(
+    () => api<unknown>(`/resources/${resource.resourceId}/availability/${windowsPath}`, {
+      method: 'POST',
+      userScoped: true,
+      body
+    }),
+    isBlackout ? 'Blackout added' : 'Extra availability added',
+    async () => {
+      availabilityWindowDraft.value = { start: '', end: '' };
+      availabilityWindowReason.value = '';
+      await loadAvailability(resource.resourceId);
+    }
+  );
+}
+
+async function removeAvailabilityWindow(window: AvailabilityWindow): Promise<void> {
+  const resource = currentResource.value;
+  if (!resource) return;
+  const type = window.type === 'BLACKOUT' ? 'blackouts' : 'extra';
+  await runAction(
+    () => api<unknown>(
+      `/resources/${resource.resourceId}/availability/${type}/${encodeURIComponent(window.windowId)}`,
+      { method: 'DELETE', userScoped: true }
+    ),
+    window.type === 'BLACKOUT' ? 'Blackout removed' : 'Extra availability removed',
+    () => loadAvailability(resource.resourceId)
+  );
+}
+
+async function clearAvailability(): Promise<void> {
+  const resource = currentResource.value;
+  if (!resource) return;
+  await runAction(
+    () => api<unknown>(`/resources/${resource.resourceId}/availability`, {
+      method: 'DELETE',
+      userScoped: true
+    }),
+    'Availability cleared; resource is always available',
+    () => loadAvailability(resource.resourceId)
+  );
+}
+
+function formatAvailabilityWindow(value: string): string {
+  return new Date(value).toLocaleString();
 }
 
 async function loadResources(): Promise<void> {
@@ -237,6 +411,17 @@ watch(() => props.connected, (connected) => {
 watch(actorId, (id) => {
   state.actorId = id;
 });
+watch(
+  () => currentResource.value?.resourceId,
+  (resourceId) => {
+    if (resourceId) {
+      void loadAvailability(resourceId);
+    } else {
+      availabilityRules.value = emptyAvailabilityRules();
+    }
+  },
+  { immediate: true }
+);
 
 onMounted(() => {
   initializeDates();
@@ -401,6 +586,135 @@ onMounted(() => {
               Save changes
             </button>
           </form>
+
+          <section class="availability-section" aria-labelledby="availability-title">
+            <div class="availability-heading">
+              <div>
+                <h3 id="availability-title">Availability rules</h3>
+                <p>Set recurring hours and one-off exceptions for this resource.</p>
+              </div>
+              <button
+                class="small-action warn"
+                type="button"
+                :disabled="busy || availabilityLoading"
+                @click="clearAvailability"
+              >
+                Always available
+              </button>
+            </div>
+            <p v-if="availabilityLoading" class="availability-note">Loading availability…</p>
+            <template v-else>
+              <form class="weekly-availability-form" @submit.prevent="saveWeeklyAvailability">
+                <label class="timezone-field">
+                  Timezone
+                  <input
+                    v-model="weeklyTimezone"
+                    type="text"
+                    placeholder="America/New_York"
+                    autocomplete="off"
+                    required
+                  >
+                </label>
+                <div class="weekly-days">
+                  <div v-for="day in weekdays" :key="day.name" class="weekly-day">
+                    <strong>{{ day.label }}</strong>
+                    <div class="weekly-ranges">
+                      <div
+                        v-for="(range, index) in availabilityRules.weeklyPattern[day.name] || []"
+                        :key="`${day.name}-${index}`"
+                        class="weekly-range"
+                      >
+                        <input
+                          v-model="range.start"
+                          type="time"
+                          :aria-label="`${day.label} start time`"
+                          required
+                        >
+                        <span>to</span>
+                        <input
+                          v-model="range.end"
+                          type="time"
+                          :aria-label="`${day.label} end time`"
+                          required
+                        >
+                        <button
+                          class="text-button"
+                          type="button"
+                          :aria-label="`Remove ${day.label} hours`"
+                          @click="removeWeeklyRange(day.name, index)"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <button
+                        class="text-button add-hours-button"
+                        type="button"
+                        @click="addWeeklyRange(day.name)"
+                      >
+                        + Add hours
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <button class="small-action" type="submit" :disabled="busy">
+                  Save weekly hours
+                </button>
+              </form>
+
+              <div class="window-management">
+                <h4>One-off availability</h4>
+                <form class="window-form" @submit.prevent="addAvailabilityWindow">
+                  <label>
+                    Type
+                    <select v-model="availabilityWindowType">
+                      <option value="BLACKOUT">Blackout</option>
+                      <option value="EXTRA">Extra availability</option>
+                    </select>
+                  </label>
+                  <label>
+                    Start
+                    <input v-model="availabilityWindowDraft.start" type="datetime-local" required>
+                  </label>
+                  <label>
+                    End
+                    <input v-model="availabilityWindowDraft.end" type="datetime-local" required>
+                  </label>
+                  <label>
+                    Reason <span class="label-note">optional</span>
+                    <input v-model="availabilityWindowReason" type="text" maxlength="240">
+                  </label>
+                  <button class="small-action" type="submit" :disabled="busy">
+                    Add window
+                  </button>
+                </form>
+                <div v-if="!availabilityRules.blackouts.length && !availabilityRules.extras.length" class="availability-note">
+                  No blackout or extra windows.
+                </div>
+                <ul v-else class="availability-windows">
+                  <li
+                    v-for="window in [...availabilityRules.blackouts, ...availabilityRules.extras]"
+                    :key="window.windowId"
+                  >
+                    <div>
+                      <span class="window-type" :class="{ blackout: window.type === 'BLACKOUT' }">
+                        {{ window.type === 'BLACKOUT' ? 'Blackout' : 'Extra' }}
+                      </span>
+                      <span>{{ formatAvailabilityWindow(window.start) }} – {{ formatAvailabilityWindow(window.end) }}</span>
+                      <span v-if="window.reason" class="window-reason">{{ window.reason }}</span>
+                    </div>
+                    <button
+                      class="text-button"
+                      type="button"
+                      :disabled="busy"
+                      @click="removeAvailabilityWindow(window)"
+                    >
+                      Remove
+                    </button>
+                  </li>
+                </ul>
+              </div>
+            </template>
+          </section>
 
           <section class="reserve-strip">
             <h3>Reserve this resource</h3>
