@@ -75,6 +75,46 @@ class ResourceControllerIntegrationTest {
 	}
 
 	@Test
+	void savesWeeklyAvailabilityAndProjectsItForRetrieval() throws Exception {
+		UUID userId = UUID.randomUUID();
+		var createResult = mockMvc.perform(post("/resources")
+				.with(httpBasic("admin", "admin"))
+				.header("X-User-Id", userId)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"name":"Availability Room","description":null,"capacity":1,"location":"Floor 1"}
+						"""))
+				.andExpect(request().asyncStarted())
+				.andReturn();
+		String location = mockMvc.perform(asyncDispatch(createResult))
+				.andExpect(status().isCreated())
+				.andReturn().getResponse().getHeader("Location");
+		UUID resourceId = UUID.fromString(location.substring(location.lastIndexOf('/') + 1));
+		await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> assertThat(resourceRepository.findById(resourceId)).isPresent());
+
+		var availabilityResult = mockMvc.perform(post("/resources/{resourceId}/availability/weekly", resourceId)
+				.with(httpBasic("admin", "admin"))
+				.header("X-User-Id", userId)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"timezone":"America/New_York","weeklyPattern":{"MONDAY":[{"start":"09:00","end":"17:00"}]}}
+						"""))
+				.andExpect(request().asyncStarted())
+				.andReturn();
+		mockMvc.perform(asyncDispatch(availabilityResult)).andExpect(status().isNoContent());
+
+		await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+				assertThat(resourceRepository.findById(resourceId).orElseThrow().getAvailabilityRules().weeklyPattern())
+						.containsKey("MONDAY"));
+		mockMvc.perform(get("/resources/{resourceId}/availability", resourceId)
+				.with(httpBasic("admin", "admin")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.timezone").value("America/New_York"))
+				.andExpect(jsonPath("$.weeklyPattern.MONDAY[0].start").value("09:00:00"))
+				.andExpect(jsonPath("$.weeklyPattern.MONDAY[0].end").value("17:00:00"));
+	}
+
+	@Test
 	void rejectsDuplicateResourceName() throws Exception {
 		resourceRepository.save(ResourceEntity.from(new ResourceCreatedEvent(UUID.randomUUID(), "Room A", null, 4,
 				"Floor 1", Instant.now())));
