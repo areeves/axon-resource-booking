@@ -28,6 +28,8 @@ docker compose up --build
 Docker Compose runs the Vue console with Vite and the Spring Boot API in separate containers. Open the console at http://localhost; edits to Vue files on the host are applied by Vite's hot-module replacement. Java and resource changes under `src/main` are recompiled automatically, and Spring DevTools restarts the API. The API is also available directly at http://localhost:8080, and PostgreSQL listens on port 5432.
 The Compose configuration enables sample resources and future reservations on startup. Sample data is created through Axon commands and is not duplicated when the app restarts.
 
+When running Vite outside Docker, set `VITE_API_PROXY_TARGET` if the API is not at `http://localhost:8080`. Docker Compose sets this to `http://api:8080` for its container network.
+
 To rebuild the database from scratch and repopulate the sample data:
 
 ```bash
