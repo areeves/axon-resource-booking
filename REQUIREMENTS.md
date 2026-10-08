@@ -1,12 +1,13 @@
 # Requirements – Event-Sourced Resource Booking System
 
 **Architecture**: CQRS + Event Sourcing  
-**Framework**: Spring Boot 3 + Axon Framework  
-**Goal**: Portfolio-quality backend that demonstrates clean CQRS/ES practices with Axon.
+**Framework**: Spring Boot 3 + Axon Framework + Vue 3 web console  
+**Goal**: Portfolio-quality backend that demonstrates clean CQRS/ES practices with Axon, supported by a working administrative console for resource and reservation operations.
 
 This document defines the Minimum Viable Product (MVP) scope and records
-explicitly marked post-MVP extensions. Only the MVP requirements are in scope
-for the initial implementation.
+explicitly marked post-MVP extensions. The project includes an implemented
+front-end console alongside the backend, and the requirements below reflect both
+backend capabilities and the shipped user-facing workflows.
 
 ---
 
@@ -75,7 +76,31 @@ for the initial implementation.
 | FR-32  | Unique identifiers are UUIDs                                                | Must     | |
 | FR-33  | User identity is passed with every command (simple header or principal)     | Must     | Full authentication can be basic for MVP |
 
-### 1.5 Complex Availability Rules (Post-MVP Extension)
+### 1.5 Frontend Console (Implemented)
+
+The project includes a Vue-based web console that is already implemented and used
+for day-to-day resource operations and system administration.
+
+| ID     | Requirement                                                                 | Priority | Notes |
+|--------|-----------------------------------------------------------------------------|----------|-------|
+| FR-40  | Resource management dashboard exists in the console                         | Must     | Create, update, deactivate/reactivate, and inspect resources |
+| FR-41  | Users can find resources by active list and availability window              | Must     | Search for available resources across time ranges |
+| FR-42  | Reservation lookup and lifecycle actions are available in the UI            | Must     | Query by user, resource, or reservation ID; confirm/cancel records |
+| FR-43  | Daily utilization view is available in the console                          | Must     | Date-range reporting for occupied hours and capacity usage |
+| FR-44  | Administrative maintenance actions are available in the web console         | Must     | Rebuild projections from the event store |
+| FR-45  | The console supports API authentication and actor configuration             | Must     | User credentials and acting user are configured in-session |
+
+The shipped console supports the following implemented workflows:
+- Create a new resource from a modal form and immediately reload the active list.
+- Update resource details and toggle activation state without leaving the resource dashboard.
+- Search for available resources for a requested time window and open the selected resource.
+- Create reservations from the selected resource, with validation for start/end ranges.
+- Review reservations by user, resource, or reservation ID, including event history inspection.
+- Confirm or cancel reservations directly from the reservation table.
+- Review daily utilization across a date range and navigate directly to a selected resource.
+- Rebuild read-model projections through the administration screen.
+
+### 1.6 Complex Availability Rules (Post-MVP Extension)
 
 These requirements extend the MVP by allowing resources to define when they can
 be booked. Reservation commands and availability queries must respect the
@@ -220,8 +245,8 @@ created-by/created-at metadata.
 - Multi-tenancy
 - Advanced authorization / roles beyond simple user vs admin
 - Real-time notifications (WebSocket, email, etc.)
-- Complex availability rules (e.g. business hours, blackout dates); specified as a post-MVP extension in section 1.5
-- UI of any kind
+- Complex availability rules (e.g. business hours, blackout dates); specified as a post-MVP extension in section 1.6
+- Additional UI redesigns beyond the shipped Vue console
 - Horizontal scaling / distributed Axon setup
 
 ---
@@ -236,8 +261,9 @@ The project is considered MVP-complete when:
 4. All listed queries return correct data from projections.
 5. The event stream of any reservation can be retrieved.
 6. Projections can be rebuilt from the event store.
-7. The application starts with Docker Compose and has passing integration tests.
-8. README and OpenAPI documentation are clear enough for another developer to understand and run the project.
+7. The shipped Vue console can create, update, and manage resources and reservations without writing custom API calls.
+8. The application starts with Docker Compose and has passing integration tests.
+9. README and OpenAPI documentation are clear enough for another developer to understand and run the project.
 
 ---
 
