@@ -11,8 +11,6 @@ RUN npm run build
 FROM nginx:alpine
 
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
-COPY src/main/resources/static/index.html /usr/share/nginx/html/index.html
-COPY src/main/resources/static/console.css /usr/share/nginx/html/console.css
-COPY --from=build /workspace/target/classes/static/app /usr/share/nginx/html/app
+COPY --from=build /workspace/frontend/dist /usr/share/nginx/html
 
 EXPOSE 80

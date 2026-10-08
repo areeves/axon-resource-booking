@@ -45,7 +45,7 @@ Set `APP_SAMPLE_DATA_ENABLED=true` when starting the application:
 APP_SAMPLE_DATA_ENABLED=true ./mvnw spring-boot:run
 ```
 
-### Direct local run
+### Run the API and frontend separately
 
 ```bash
 export DB_URL=jdbc:postgresql://localhost:5432/axon_resource_booking
@@ -53,6 +53,16 @@ export DB_USERNAME=postgres
 export DB_PASSWORD=postgres
 ./mvnw spring-boot:run
 ```
+
+In another terminal, start the frontend:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Open the Vite URL printed in the frontend terminal. The frontend proxies API requests to `http://localhost:8080` by default; set `VITE_API_PROXY_TARGET` if the API runs elsewhere. Spring serves the API, but does not serve the web console.
 
 ## API access
 
@@ -63,9 +73,9 @@ All REST endpoints require HTTP Basic authentication. Use the default credential
 
 ## Web console
 
-Open the application root (for example, http://localhost:8080) to manage resources and reservations, inspect reservation events, view daily utilization, and rebuild projections. The console asks for API credentials and an actor UUID; the password is kept only in the current page session.
+Open the frontend URL (http://localhost with Docker Compose, or the Vite URL printed by `npm run dev`) to manage resources and reservations, inspect reservation events, view daily utilization, and rebuild projections. The console asks for API credentials and an actor UUID; the password is kept only in the current page session. The Spring API at http://localhost:8080 does not serve the web console.
 
-The Vue console is built into Spring's static resources during Maven builds; Maven installs the pinned Node.js and npm versions automatically.
+The Vue console is built independently by Vite and served by the frontend Nginx container in production. Maven builds only the Spring Boot API.
 
 OpenAPI documentation is available at:
 
