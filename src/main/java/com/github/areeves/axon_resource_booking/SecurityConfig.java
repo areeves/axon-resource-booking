@@ -25,7 +25,6 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                 .requestMatchers("/docs", "/docs/**", "/v3/api-docs/**").permitAll()
-                .requestMatchers("/", "/index.html", "/console.css", "/app/**").permitAll()
                 .anyRequest().authenticated())
             .httpBasic(Customizer.withDefaults());
         return http.build();
