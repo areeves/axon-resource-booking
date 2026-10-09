@@ -166,7 +166,19 @@ async function saveWeeklyAvailability(): Promise<void> {
       body: { timezone, weeklyPattern }
     }),
     'Weekly availability saved',
-    () => loadAvailability(resource.resourceId)
+    async () => {
+      availabilityRules.value = {
+        ...availabilityRules.value,
+        timezone,
+        weeklyPattern: Object.fromEntries(
+          Object.entries(weeklyPattern).map(([day, ranges]) => [
+            day,
+            ranges.map((range) => ({ ...range }))
+          ])
+        )
+      };
+      weeklyTimezone.value = timezone;
+    }
   );
 }
 
