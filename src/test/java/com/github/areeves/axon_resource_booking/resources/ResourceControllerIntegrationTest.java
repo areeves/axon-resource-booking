@@ -106,12 +106,29 @@ class ResourceControllerIntegrationTest {
 		await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
 				assertThat(resourceRepository.findById(resourceId).orElseThrow().getAvailabilityRules().weeklyPattern())
 						.containsKey("MONDAY"));
+
+		var updateResult = mockMvc.perform(post("/resources/{resourceId}/availability", resourceId)
+				.with(httpBasic("admin", "admin"))
+				.header("X-User-Id", userId)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"timezone":"America/New_York","weeklyPattern":{"TUESDAY":[{"start":"10:00","end":"16:00"}]}}
+						"""))
+				.andExpect(request().asyncStarted())
+				.andReturn();
+		mockMvc.perform(asyncDispatch(updateResult)).andExpect(status().isNoContent());
+
+		await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+				assertThat(resourceRepository.findById(resourceId).orElseThrow().getAvailabilityRules().weeklyPattern())
+						.containsKey("TUESDAY")
+						.doesNotContainKey("MONDAY"));
 		mockMvc.perform(get("/resources/{resourceId}/availability", resourceId)
 				.with(httpBasic("admin", "admin")))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.timezone").value("America/New_York"))
-				.andExpect(jsonPath("$.weeklyPattern.MONDAY[0].start").value("09:00:00"))
-				.andExpect(jsonPath("$.weeklyPattern.MONDAY[0].end").value("17:00:00"));
+				.andExpect(jsonPath("$.weeklyPattern.TUESDAY[0].start").value("10:00:00"))
+				.andExpect(jsonPath("$.weeklyPattern.TUESDAY[0].end").value("16:00:00"))
+				.andExpect(jsonPath("$.weeklyPattern.MONDAY").doesNotExist());
 	}
 
 	@Test
