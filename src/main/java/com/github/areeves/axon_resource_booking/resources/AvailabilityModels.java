@@ -9,6 +9,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 record AvailabilityTimeRange(LocalTime start, LocalTime end) {
 	public AvailabilityTimeRange {
 		Objects.requireNonNull(start, "start is required");
@@ -49,6 +51,7 @@ record ResourceAvailabilityRules(String timezone,
 		return new ResourceAvailabilityRules(null, Map.of(), List.of(), List.of());
 	}
 
+	@JsonIgnore
 	public boolean isAlwaysAvailable() {
 		return (timezone == null || timezone.isBlank())
 				&& weeklyPattern.isEmpty()
@@ -136,4 +139,3 @@ record ResourceBlackoutRemovedEvent(UUID resourceId, UUID windowId, Instant upda
 
 record ResourceExtraAvailabilityRemovedEvent(UUID resourceId, UUID windowId, Instant updatedAt) {
 }
-
