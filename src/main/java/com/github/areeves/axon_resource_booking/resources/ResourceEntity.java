@@ -100,11 +100,7 @@ public class ResourceEntity {
 	}
 
 	public ResourceAvailabilityRules getAvailabilityRules() {
-		try {
-			return deserialize(availabilityRules);
-		} catch (RuntimeException ex) {
-			return ResourceAvailabilityRules.empty();
-		}
+		return deserialize(availabilityRules);
 	}
 
 	public void setAvailabilityRules(ResourceAvailabilityRules rules) {
