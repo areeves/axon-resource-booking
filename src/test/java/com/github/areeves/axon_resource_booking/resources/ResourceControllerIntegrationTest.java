@@ -107,7 +107,7 @@ class ResourceControllerIntegrationTest {
 				assertThat(resourceRepository.findById(resourceId).orElseThrow().getAvailabilityRules().weeklyPattern())
 						.containsKey("MONDAY"));
 
-		var updateResult = mockMvc.perform(post("/resources/{resourceId}/availability", resourceId)
+		var updateResult = mockMvc.perform(post("/resources/{resourceId}/availability/weekly", resourceId)
 				.with(httpBasic("admin", "admin"))
 				.header("X-User-Id", userId)
 				.contentType(MediaType.APPLICATION_JSON)
