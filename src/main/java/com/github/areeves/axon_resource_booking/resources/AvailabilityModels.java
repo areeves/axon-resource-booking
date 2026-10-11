@@ -68,15 +68,7 @@ record ResourceAvailabilityRules(String timezone,
 	}
 }
 
-record SetResourceAvailabilityCommand(@org.axonframework.modelling.command.TargetAggregateIdentifier UUID resourceId,
-		UUID userId, String timezone, Map<String, List<AvailabilityTimeRange>> weeklyPattern) {
-}
-
 record UpdateWeeklyAvailabilityPatternCommand(@org.axonframework.modelling.command.TargetAggregateIdentifier UUID resourceId,
-		UUID userId, String timezone, Map<String, List<AvailabilityTimeRange>> weeklyPattern) {
-}
-
-record SetAvailabilityRulesCommand(@org.axonframework.modelling.command.TargetAggregateIdentifier UUID resourceId,
 		UUID userId, String timezone, Map<String, List<AvailabilityTimeRange>> weeklyPattern) {
 }
 
@@ -88,15 +80,7 @@ record AddResourceBlackoutCommand(@org.axonframework.modelling.command.TargetAgg
 		UUID userId, UUID windowId, Instant start, Instant end, String reason) {
 }
 
-record AddBlackoutWindowCommand(@org.axonframework.modelling.command.TargetAggregateIdentifier UUID resourceId,
-		UUID userId, UUID windowId, Instant start, Instant end, String reason) {
-}
-
 record AddResourceExtraAvailabilityCommand(@org.axonframework.modelling.command.TargetAggregateIdentifier UUID resourceId,
-		UUID userId, UUID windowId, Instant start, Instant end, String reason) {
-}
-
-record AddExtraAvailabilityWindowCommand(@org.axonframework.modelling.command.TargetAggregateIdentifier UUID resourceId,
 		UUID userId, UUID windowId, Instant start, Instant end, String reason) {
 }
 
@@ -104,15 +88,7 @@ record RemoveResourceBlackoutCommand(@org.axonframework.modelling.command.Target
 		UUID userId, UUID windowId) {
 }
 
-record RemoveBlackoutWindowCommand(@org.axonframework.modelling.command.TargetAggregateIdentifier UUID resourceId,
-		UUID userId, UUID windowId) {
-}
-
 record RemoveResourceExtraAvailabilityCommand(@org.axonframework.modelling.command.TargetAggregateIdentifier UUID resourceId,
-		UUID userId, UUID windowId) {
-}
-
-record RemoveExtraAvailabilityWindowCommand(@org.axonframework.modelling.command.TargetAggregateIdentifier UUID resourceId,
 		UUID userId, UUID windowId) {
 }
 

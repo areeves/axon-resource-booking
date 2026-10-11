@@ -135,37 +135,6 @@ public class ResourceController {
 				.orElseGet(() -> ResponseEntity.notFound().build());
 	}
 
-	@GetMapping("/{resourceId}/availability/calendar")
-	public ResponseEntity<Map<String, Object>> getAvailabilityCalendar(@PathVariable UUID resourceId,
-			@RequestParam Instant start, @RequestParam Instant end) {
-		validateTimeWindow(start, end);
-		return resourceRepository.findById(resourceId)
-				.map(resource -> {
-					Map<String, Object> payload = new HashMap<>();
-					payload.put("resourceId", resourceId.toString());
-					payload.put("start", start.toString());
-					payload.put("end", end.toString());
-					payload.put("rules", resource.getAvailabilityRules());
-					payload.put("fullyAvailable", ResourceAvailability.isFullyAvailable(resource.getAvailabilityRules(), start, end));
-					return ResponseEntity.ok(payload);
-				})
-				.orElseGet(() -> ResponseEntity.notFound().build());
-	}
-
-	@PostMapping("/{resourceId}/availability")
-	public CompletableFuture<ResponseEntity<Void>> setAvailability(@PathVariable UUID resourceId,
-			@RequestHeader("X-User-Id") UUID userId, @RequestBody Map<String, Object> payload) {
-		var rules = parseRules(payload);
-		return commandGateway.send(new SetResourceAvailabilityCommand(resourceId, userId, rules.timezone(), rules.weeklyPattern()))
-				.thenApply(ignored -> ResponseEntity.noContent().build());
-	}
-
-	@PutMapping("/{resourceId}/availability")
-	public CompletableFuture<ResponseEntity<Void>> updateAvailability(@PathVariable UUID resourceId,
-			@RequestHeader("X-User-Id") UUID userId, @RequestBody Map<String, Object> payload) {
-		return setAvailability(resourceId, userId, payload);
-	}
-
 	@PostMapping("/{resourceId}/availability/weekly")
 	public CompletableFuture<ResponseEntity<Void>> setWeeklyAvailability(@PathVariable UUID resourceId,
 			@RequestHeader("X-User-Id") UUID userId, @RequestBody Map<String, Object> payload) {
@@ -189,24 +158,12 @@ public class ResourceController {
 				window.end(), window.reason())).thenApply(ignored -> ResponseEntity.noContent().build());
 	}
 
-	@PostMapping("/{resourceId}/availability/blackout")
-	public CompletableFuture<ResponseEntity<Void>> addBlackoutAlias(@PathVariable UUID resourceId,
-			@RequestHeader("X-User-Id") UUID userId, @RequestBody Map<String, Object> payload) {
-		return addBlackout(resourceId, userId, payload);
-	}
-
 	@PostMapping("/{resourceId}/availability/extra")
 	public CompletableFuture<ResponseEntity<Void>> addExtraWindow(@PathVariable UUID resourceId,
 			@RequestHeader("X-User-Id") UUID userId, @RequestBody Map<String, Object> payload) {
 		var window = toWindow(payload, resourceId, userId, AvailabilityWindowType.EXTRA);
 		return commandGateway.send(new AddResourceExtraAvailabilityCommand(resourceId, userId, window.windowId(), window.start(),
 				window.end(), window.reason())).thenApply(ignored -> ResponseEntity.noContent().build());
-	}
-
-	@PostMapping("/{resourceId}/availability/extra-window")
-	public CompletableFuture<ResponseEntity<Void>> addExtraWindowAlias(@PathVariable UUID resourceId,
-			@RequestHeader("X-User-Id") UUID userId, @RequestBody Map<String, Object> payload) {
-		return addExtraWindow(resourceId, userId, payload);
 	}
 
 	@DeleteMapping("/{resourceId}/availability/blackouts/{windowId}")
@@ -216,23 +173,11 @@ public class ResourceController {
 				.thenApply(ignored -> ResponseEntity.noContent().build());
 	}
 
-	@DeleteMapping("/{resourceId}/availability/blackout/{windowId}")
-	public CompletableFuture<ResponseEntity<Void>> removeBlackoutAlias(@PathVariable UUID resourceId,
-			@PathVariable UUID windowId, @RequestHeader("X-User-Id") UUID userId) {
-		return removeBlackout(resourceId, windowId, userId);
-	}
-
 	@DeleteMapping("/{resourceId}/availability/extra/{windowId}")
 	public CompletableFuture<ResponseEntity<Void>> removeExtra(@PathVariable UUID resourceId,
 			@PathVariable UUID windowId, @RequestHeader("X-User-Id") UUID userId) {
 		return commandGateway.send(new RemoveResourceExtraAvailabilityCommand(resourceId, userId, windowId))
 				.thenApply(ignored -> ResponseEntity.noContent().build());
-	}
-
-	@PostMapping("/{resourceId}/availability/clear")
-	public CompletableFuture<ResponseEntity<Void>> clearAvailabilityAlias(@PathVariable UUID resourceId,
-			@RequestHeader("X-User-Id") UUID userId) {
-		return clearAvailability(resourceId, userId);
 	}
 
 	@PostMapping

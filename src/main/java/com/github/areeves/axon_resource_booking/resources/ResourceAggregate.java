@@ -88,7 +88,7 @@ public class ResourceAggregate {
 	}
 
 	@CommandHandler
-	public void handle(SetResourceAvailabilityCommand command) {
+	public void handle(UpdateWeeklyAvailabilityPatternCommand command) {
 		if (command.userId() == null) {
 			throw new IllegalArgumentException("User identity is required");
 		}
@@ -98,16 +98,6 @@ public class ResourceAggregate {
 		}
 		AggregateLifecycle.apply(new ResourceAvailabilityRulesUpdatedEvent(resourceId, rules.timezone(), rules.weeklyPattern(),
 				availabilityRules.blackouts(), availabilityRules.extras(), Instant.now()));
-	}
-
-	@CommandHandler
-	public void handle(UpdateWeeklyAvailabilityPatternCommand command) {
-		handle(new SetResourceAvailabilityCommand(command.resourceId(), command.userId(), command.timezone(), command.weeklyPattern()));
-	}
-
-	@CommandHandler
-	public void handle(SetAvailabilityRulesCommand command) {
-		handle(new SetResourceAvailabilityCommand(command.resourceId(), command.userId(), command.timezone(), command.weeklyPattern()));
 	}
 
 	@CommandHandler
@@ -134,12 +124,6 @@ public class ResourceAggregate {
 	}
 
 	@CommandHandler
-	public void handle(AddBlackoutWindowCommand command) {
-		handle(new AddResourceBlackoutCommand(command.resourceId(), command.userId(), command.windowId(), command.start(),
-				command.end(), command.reason()));
-	}
-
-	@CommandHandler
 	public void handle(AddResourceExtraAvailabilityCommand command) {
 		if (command.userId() == null) {
 			throw new IllegalArgumentException("User identity is required");
@@ -155,12 +139,6 @@ public class ResourceAggregate {
 	}
 
 	@CommandHandler
-	public void handle(AddExtraAvailabilityWindowCommand command) {
-		handle(new AddResourceExtraAvailabilityCommand(command.resourceId(), command.userId(), command.windowId(), command.start(),
-				command.end(), command.reason()));
-	}
-
-	@CommandHandler
 	public void handle(RemoveResourceBlackoutCommand command) {
 		if (command.userId() == null) {
 			throw new IllegalArgumentException("User identity is required");
@@ -169,21 +147,11 @@ public class ResourceAggregate {
 	}
 
 	@CommandHandler
-	public void handle(RemoveBlackoutWindowCommand command) {
-		handle(new RemoveResourceBlackoutCommand(command.resourceId(), command.userId(), command.windowId()));
-	}
-
-	@CommandHandler
 	public void handle(RemoveResourceExtraAvailabilityCommand command) {
 		if (command.userId() == null) {
 			throw new IllegalArgumentException("User identity is required");
 		}
 		AggregateLifecycle.apply(new ResourceExtraAvailabilityRemovedEvent(resourceId, command.windowId(), Instant.now()));
-	}
-
-	@CommandHandler
-	public void handle(RemoveExtraAvailabilityWindowCommand command) {
-		handle(new RemoveResourceExtraAvailabilityCommand(command.resourceId(), command.userId(), command.windowId()));
 	}
 
 	@CommandHandler
