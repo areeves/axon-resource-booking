@@ -1,5 +1,7 @@
 package com.github.areeves.axon_resource_booking.resources;
 
+import java.util.Locale;
+
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Component;
@@ -13,10 +15,13 @@ public class CommandMetrics {
 		this.meterRegistry = meterRegistry;
 	}
 
-	public void increment(String command) {
+	public void increment(Class<?> commandType) {
+		String commandName = commandType.getSimpleName().replaceFirst("Command$", "")
+				.replaceAll("([a-z0-9])([A-Z])", "$1_$2")
+				.toLowerCase(Locale.ROOT);
 		Counter.builder("axon.commands.total")
-				.tag("command", command)
-				.description("Number of commands accepted by the REST API")
+				.tag("command", commandName)
+				.description("Number of commands dispatched through Axon")
 				.register(meterRegistry)
 				.increment();
 	}

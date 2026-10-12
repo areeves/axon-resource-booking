@@ -37,14 +37,12 @@ public class ResourceController {
 	private final CommandGateway commandGateway;
 	private final ResourceRepository resourceRepository;
 	private final ReservationRepository reservationRepository;
-	private final CommandMetrics commandMetrics;
 
 	public ResourceController(CommandGateway commandGateway, ResourceRepository resourceRepository,
-			ReservationRepository reservationRepository, CommandMetrics commandMetrics) {
+			ReservationRepository reservationRepository) {
 		this.commandGateway = commandGateway;
 		this.resourceRepository = resourceRepository;
 		this.reservationRepository = reservationRepository;
-		this.commandMetrics = commandMetrics;
 	}
 
 	@GetMapping
@@ -187,7 +185,6 @@ public class ResourceController {
 			throw new ResponseStatusException(HttpStatus.CONFLICT, "Resource name already exists");
 		}
 		UUID resourceId = UUID.randomUUID();
-		commandMetrics.increment("create_resource");
 		CreateResourceCommand command = new CreateResourceCommand(resourceId, userId, request.name(),
 				request.description(), request.capacity(), request.location());
 
@@ -200,7 +197,6 @@ public class ResourceController {
 			@RequestHeader("X-User-Id") UUID userId, @Valid @RequestBody UpdateResourceRequest request) {
 		UpdateResourceCommand command = new UpdateResourceCommand(resourceId, userId, request.name(),
 				request.description(), request.location());
-		commandMetrics.increment("update_resource");
 
 		return commandGateway.send(command).thenApply(ignored -> ResponseEntity.noContent().build());
 	}
@@ -208,7 +204,6 @@ public class ResourceController {
 	@PostMapping("/{resourceId}/deactivate")
 	public CompletableFuture<ResponseEntity<Void>> deactivate(@PathVariable UUID resourceId,
 			@RequestHeader("X-User-Id") UUID userId) {
-		commandMetrics.increment("deactivate_resource");
 		return commandGateway.send(new DeactivateResourceCommand(resourceId, userId))
 				.thenApply(ignored -> ResponseEntity.noContent().build());
 	}
@@ -216,7 +211,6 @@ public class ResourceController {
 	@PostMapping("/{resourceId}/reactivate")
 	public CompletableFuture<ResponseEntity<Void>> reactivate(@PathVariable UUID resourceId,
 			@RequestHeader("X-User-Id") UUID userId) {
-		commandMetrics.increment("reactivate_resource");
 		return commandGateway.send(new ReactivateResourceCommand(resourceId, userId))
 				.thenApply(ignored -> ResponseEntity.noContent().build());
 	}
@@ -228,7 +222,6 @@ public class ResourceController {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User identity in header and payload must match");
 		}
 		UUID reservationId = UUID.randomUUID();
-		commandMetrics.increment("reserve_resource");
 		ReserveResourceCommand command = new ReserveResourceCommand(resourceId, reservationId, userId,
 				request.start(), request.end());
 		return commandGateway.send(command).thenApply(ignored -> ResponseEntity
@@ -241,7 +234,6 @@ public class ResourceController {
 			Authentication authentication) {
 		boolean admin = authentication.getAuthorities().stream()
 				.anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN"));
-		commandMetrics.increment("cancel_reservation");
 		return commandGateway.send(new CancelReservationCommand(resourceId, reservationId, userId, admin))
 				.thenApply(ignored -> ResponseEntity.noContent().build());
 	}
@@ -249,7 +241,6 @@ public class ResourceController {
 	@PostMapping("/{resourceId}/reservations/{reservationId}/confirm")
 	public CompletableFuture<ResponseEntity<Void>> confirm(@PathVariable UUID resourceId,
 			@PathVariable UUID reservationId, @RequestHeader("X-User-Id") UUID userId) {
-		commandMetrics.increment("confirm_reservation");
 		return commandGateway.send(new ConfirmReservationCommand(resourceId, reservationId, userId))
 				.thenApply(ignored -> ResponseEntity.noContent().build());
 	}

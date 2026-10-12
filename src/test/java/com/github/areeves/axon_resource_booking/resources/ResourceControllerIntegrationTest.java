@@ -15,6 +15,8 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.UUID;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import org.axonframework.commandhandling.gateway.CommandGateway;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,6 +37,12 @@ class ResourceControllerIntegrationTest {
 	private MockMvc mockMvc;
 
 	@Autowired
+	private CommandGateway commandGateway;
+
+	@Autowired
+	private MeterRegistry meterRegistry;
+
+	@Autowired
 	private ResourceRepository resourceRepository;
 
 	@Autowired
@@ -53,6 +61,17 @@ class ResourceControllerIntegrationTest {
 	@Test
 	void actuatorHealthEndpointIsAvailable() throws Exception {
 		mockMvc.perform(get("/actuator/health")).andExpect(status().isOk());
+	}
+
+	@Test
+	void tracksCommandsSentOutsideRestControllers() {
+		commandGateway.sendAndWait(new CreateResourceCommand(UUID.randomUUID(), UUID.randomUUID(), "Direct command",
+				null, 1, "Floor 1"));
+
+		assertThat(meterRegistry.get("axon.commands.total")
+				.tag("command", "create_resource")
+				.counter()
+				.count()).isEqualTo(1.0);
 	}
 
 	@Test
