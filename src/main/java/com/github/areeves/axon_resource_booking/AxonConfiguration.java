@@ -3,6 +3,7 @@ package com.github.areeves.axon_resource_booking;
 import org.axonframework.common.jpa.EntityManagerProvider;
 import org.axonframework.common.jpa.SimpleEntityManagerProvider;
 import org.axonframework.common.transaction.TransactionManager;
+import org.axonframework.config.ConfigurerModule;
 import org.axonframework.eventsourcing.eventstore.EventStorageEngine;
 import org.axonframework.eventsourcing.eventstore.jpa.JpaEventStorageEngine;
 import org.axonframework.serialization.Serializer;
@@ -14,6 +15,7 @@ import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.areeves.axon_resource_booking.resources.CommandMetricsInterceptor;
 
 import jakarta.persistence.EntityManager;
 
@@ -24,6 +26,12 @@ import jakarta.persistence.EntityManager;
 			"org.axonframework.eventhandling.tokenstore.jpa"
 })
 public class AxonConfiguration {
+
+	@Bean
+	ConfigurerModule commandMetricsConfigurerModule(CommandMetricsInterceptor commandMetricsInterceptor) {
+		return configurer -> configurer.onInitialize(configuration ->
+				configuration.commandBus().registerDispatchInterceptor(commandMetricsInterceptor));
+	}
 
 	@Bean(name = "eventSerializer")
 	Serializer eventSerializer(ObjectMapper objectMapper) {
