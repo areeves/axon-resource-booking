@@ -17,6 +17,12 @@ services:
       SPRING_SECURITY_USER_NAME: admin
       SPRING_SECURITY_USER_PASSWORD: admin
       APP_SAMPLE_DATA_ENABLED: "true"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://localhost:8080/actuator/health/readiness"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
     depends_on:
       postgres:
         condition: service_healthy
@@ -33,7 +39,8 @@ services:
     environment:
       VITE_API_PROXY_TARGET: http://api:8080
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
   postgres:
     image: postgres:16-alpine
