@@ -15,8 +15,6 @@ import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.areeves.axon_resource_booking.resources.CommandMetricsInterceptor;
-
 import jakarta.persistence.EntityManager;
 
 @Configuration
@@ -26,12 +24,6 @@ import jakarta.persistence.EntityManager;
 			"org.axonframework.eventhandling.tokenstore.jpa"
 })
 public class AxonConfiguration {
-
-	@Bean
-	ConfigurerModule commandMetricsConfigurerModule(CommandMetricsInterceptor commandMetricsInterceptor) {
-		return configurer -> configurer.onInitialize(configuration ->
-				configuration.commandBus().registerDispatchInterceptor(commandMetricsInterceptor));
-	}
 
 	@Bean(name = "eventSerializer")
 	Serializer eventSerializer(ObjectMapper objectMapper) {
