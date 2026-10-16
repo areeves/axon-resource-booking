@@ -4,10 +4,10 @@
 **Framework**: Spring Boot 3 + Axon Framework + Vue 3 web console  
 **Goal**: Portfolio-quality backend that demonstrates clean CQRS/ES practices with Axon, supported by a working administrative console for resource and reservation operations.
 
-This document defines the Minimum Viable Product (MVP) scope and records
-explicitly marked post-MVP extensions. The project includes an implemented
-front-end console alongside the backend, and the requirements below reflect both
-backend capabilities and the shipped user-facing workflows.
+This document defines the Minimum Viable Product (MVP) scope. The project
+includes an implemented front-end console alongside the backend, and the
+requirements below reflect both backend capabilities and the shipped
+user-facing workflows.
 
 ---
 
@@ -105,11 +105,10 @@ The shipped console supports the following implemented workflows:
 - Review daily utilization across a date range and navigate directly to a selected resource.
 - Rebuild read-model projections through the administration screen.
 
-### 1.6 Complex Availability Rules (Post-MVP Extension)
-
-These requirements extend the MVP by allowing resources to define when they can
-be booked. Reservation commands and availability queries must respect the
-effective bookable windows rather than assuming resources are available 24/7.
+### 1.6 Availability Rules (MVP)
+These requirements allow resources to define when they can be booked.
+Reservation commands and availability queries must respect the effective
+bookable windows rather than assuming resources are available 24/7.
 
 #### Availability rule management (write side)
 
@@ -202,7 +201,7 @@ created-by/created-at metadata.
 | NFR-20  | Command handling for a single reservation completes in < 200 ms under normal load (local) | Should |
 | NFR-21  | Queries are served from dedicated read models (never by replaying events on every request) | Must |
 | NFR-22  | System supports at least a few hundred reservations and tens of resources without noticeable degradation in local testing | Should |
-| NFR-AV-03 | Post-MVP: rule evaluation for a single reservation command adds less than 50 ms of local latency | Should |
+| NFR-AV-03 | Rule evaluation for a single reservation command adds less than 50 ms of local latency | Should |
 
 ### 2.4 Observability & Operability
 
@@ -250,7 +249,6 @@ created-by/created-at metadata.
 - Multi-tenancy
 - Advanced authorization / roles beyond simple user vs admin
 - Real-time notifications (WebSocket, email, etc.)
-- Complex availability rules (e.g. business hours, blackout dates); specified as a post-MVP extension in section 1.6
 - Additional UI redesigns beyond the shipped Vue console
 - Horizontal scaling / distributed Axon setup
 
@@ -269,22 +267,15 @@ The project is considered MVP-complete when:
 7. The shipped Vue console can create, update, and manage resources and reservations without writing custom API calls.
 8. The application starts with Docker Compose and has passing integration tests.
 9. README and OpenAPI documentation are clear enough for another developer to understand and run the project.
+10. Resources support timezone-aware weekly availability, blackout windows, and extra availability windows.
+11. A resource with a Mon–Fri 09:00–17:00 pattern rejects Saturday bookings and bookings that extend beyond bookable hours, such as Friday 16:00–18:00.
+12. Blackout windows prevent new reservations in those intervals without changing existing reservations.
+13. Availability and next-slot queries return correct results from projections, including after projection rebuilds.
+14. Aggregate unit tests cover availability rule-combination edge cases, and an integration test covers the full availability flow.
 
 ---
 
-## 5. Success Criteria for Complex Availability (Post-MVP)
-
-1. A resource with a Mon–Fri 09:00–17:00 pattern rejects a Saturday booking and
-   a Friday 16:00–18:00 booking.
-2. Adding a blackout window makes that interval unavailable for new reservations
-   while leaving prior bookings untouched.
-3. Availability and next-slot queries return correct results from projections.
-4. Updating the weekly pattern and rebuilding projections yields identical
-   query results.
-5. Aggregate unit tests cover the rules and at least one end-to-end integration
-   test covers the full flow.
-
-## 6. Suggested Implementation Order for Complex Availability
+## 5. Suggested Implementation Order for Availability
 
 1. Add the weekly pattern and timezone to Resource, or introduce a dedicated
    Availability aggregate.
