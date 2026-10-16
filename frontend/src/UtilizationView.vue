@@ -84,7 +84,7 @@ function formatResultCount(rowCount: number, resourceId: string): string {
       <div>
         <div class="eyebrow">CAPACITY / DAILY PROJECTION</div>
         <h1>Utilization</h1>
-        <p class="page-subtitle">Review occupied hours and capacity across a date range.</p>
+        <p class="page-subtitle">Compare scheduled bookable hours with occupied hours and capacity.</p>
       </div>
     </div>
 
@@ -136,7 +136,7 @@ function formatResultCount(rowCount: number, resourceId: string): string {
       <div v-if="!utilizationRows.length" class="empty-state">
         {{ utilizationResultRan
           ? 'No utilization records in this range.'
-          : 'Utilization is shown in UTC. Date ranges can include up to 366 days.' }}
+          : 'Dates are grouped in UTC. Ranges can include up to 366 days.' }}
       </div>
       <div v-else class="utilization-table-wrap">
         <table>
@@ -144,6 +144,7 @@ function formatResultCount(rowCount: number, resourceId: string): string {
             <tr>
               <th>UTC DATE</th>
               <th>RESERVATIONS</th>
+              <th>BOOKABLE HOURS</th>
               <th>OCCUPIED HOURS</th>
               <th>CAPACITY USED</th>
             </tr>
@@ -152,6 +153,7 @@ function formatResultCount(rowCount: number, resourceId: string): string {
             <tr v-for="row in utilizationRows" :key="row.date">
               <td>{{ row.date }}</td>
               <td>{{ row.reservationCount }}</td>
+              <td>{{ row.bookableHours }} h</td>
               <td>{{ row.occupiedHours }} h</td>
               <td>
                 <div class="util-bar">

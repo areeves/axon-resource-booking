@@ -15,9 +15,12 @@ import org.axonframework.eventsourcing.EventSourcingHandler;
 import org.axonframework.modelling.command.AggregateIdentifier;
 import org.axonframework.modelling.command.AggregateLifecycle;
 import org.axonframework.spring.stereotype.Aggregate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Aggregate
 public class ResourceAggregate {
+	private static final Logger log = LoggerFactory.getLogger(ResourceAggregate.class);
 
 	@AggregateIdentifier
 	private UUID resourceId;
@@ -93,9 +96,13 @@ public class ResourceAggregate {
 			throw new IllegalArgumentException("User identity is required");
 		}
 		var rules = normalizeRules(command.timezone(), command.weeklyPattern());
-		if (!rules.isAlwaysAvailable() && (command.timezone() == null || command.timezone().isBlank())) {
+		if (!rules.isAlwaysAvailable() && rules.timezone() == null) {
 			throw new IllegalArgumentException("A timezone is required when availability rules are defined");
 		}
+		if (rules.timezone() != null) {
+			ZoneId.of(rules.timezone());
+		}
+		ensureNoAvailabilityConflicts(rules, command.rejectConflictingReservations());
 		AggregateLifecycle.apply(new ResourceAvailabilityRulesUpdatedEvent(resourceId, rules.timezone(), rules.weeklyPattern(),
 				availabilityRules.blackouts(), availabilityRules.extras(), Instant.now()));
 	}
@@ -119,6 +126,14 @@ public class ResourceAggregate {
 		if (!command.end().isAfter(command.start())) {
 			throw new IllegalArgumentException("Blackout end must be after start");
 		}
+		requireAvailabilityTimezone();
+		requireUnusedWindowId(command.windowId());
+		var addedWindow = new AvailabilityWindow(command.windowId(), command.start(), command.end(), AvailabilityWindowType.BLACKOUT,
+				command.reason(), command.userId(), Instant.now());
+		var proposedBlackouts = new ArrayList<>(availabilityRules.blackouts());
+		proposedBlackouts.add(addedWindow);
+		ensureNoAvailabilityConflicts(new ResourceAvailabilityRules(availabilityRules.timezone(), availabilityRules.weeklyPattern(),
+				proposedBlackouts, availabilityRules.extras()), command.rejectConflictingReservations());
 		AggregateLifecycle.apply(new ResourceBlackoutAddedEvent(resourceId, command.windowId(), command.start(), command.end(),
 				command.reason(), command.userId(), Instant.now()));
 	}
@@ -134,7 +149,37 @@ public class ResourceAggregate {
 		if (!command.end().isAfter(command.start())) {
 			throw new IllegalArgumentException("Extra availability end must be after start");
 		}
+		requireAvailabilityTimezone();
+		requireUnusedWindowId(command.windowId());
 		AggregateLifecycle.apply(new ResourceExtraAvailabilityAddedEvent(resourceId, command.windowId(), command.start(), command.end(),
+				command.reason(), command.userId(), Instant.now()));
+	}
+
+	@CommandHandler
+	public void handle(UpdateResourceBlackoutCommand command) {
+		requireAvailabilityWindowUpdate(command.userId(), command.start(), command.end());
+		AvailabilityWindow current = availabilityWindow(availabilityRules.blackouts(), command.windowId(), "Blackout");
+		var proposedBlackouts = availabilityRules.blackouts().stream().map(window -> window.windowId().equals(command.windowId())
+				? new AvailabilityWindow(window.windowId(), command.start(), command.end(), window.type(), command.reason(),
+						window.createdBy(), window.createdAt())
+				: window).toList();
+		ensureNoAvailabilityConflicts(new ResourceAvailabilityRules(availabilityRules.timezone(), availabilityRules.weeklyPattern(),
+				proposedBlackouts, availabilityRules.extras()), command.rejectConflictingReservations());
+		AggregateLifecycle.apply(new ResourceBlackoutUpdatedEvent(resourceId, command.windowId(), command.start(), command.end(),
+				command.reason(), command.userId(), Instant.now()));
+	}
+
+	@CommandHandler
+	public void handle(UpdateResourceExtraAvailabilityCommand command) {
+		requireAvailabilityWindowUpdate(command.userId(), command.start(), command.end());
+		availabilityWindow(availabilityRules.extras(), command.windowId(), "Extra availability");
+		var proposedExtras = availabilityRules.extras().stream().map(window -> window.windowId().equals(command.windowId())
+				? new AvailabilityWindow(window.windowId(), command.start(), command.end(), window.type(), command.reason(),
+						window.createdBy(), window.createdAt())
+				: window).toList();
+		ensureNoAvailabilityConflicts(new ResourceAvailabilityRules(availabilityRules.timezone(), availabilityRules.weeklyPattern(),
+				availabilityRules.blackouts(), proposedExtras), command.rejectConflictingReservations());
+		AggregateLifecycle.apply(new ResourceExtraAvailabilityUpdatedEvent(resourceId, command.windowId(), command.start(), command.end(),
 				command.reason(), command.userId(), Instant.now()));
 	}
 
@@ -151,6 +196,10 @@ public class ResourceAggregate {
 		if (command.userId() == null) {
 			throw new IllegalArgumentException("User identity is required");
 		}
+		availabilityWindow(availabilityRules.extras(), command.windowId(), "Extra availability");
+		var proposedExtras = availabilityRules.extras().stream().filter(window -> !window.windowId().equals(command.windowId())).toList();
+		ensureNoAvailabilityConflicts(new ResourceAvailabilityRules(availabilityRules.timezone(), availabilityRules.weeklyPattern(),
+				availabilityRules.blackouts(), proposedExtras), command.rejectConflictingReservations());
 		AggregateLifecycle.apply(new ResourceExtraAvailabilityRemovedEvent(resourceId, command.windowId(), Instant.now()));
 	}
 
@@ -177,12 +226,13 @@ public class ResourceAggregate {
 		if (reservations.stream().anyMatch(reservation -> reservation.reservationId().equals(command.reservationId()))) {
 			throw new IllegalStateException("Reservation already exists");
 		}
-		long overlappingReservations = reservations.stream()
+		List<ResourceAvailability.Interval> overlappingReservations = reservations.stream()
 				.filter(reservation -> reservation.status() != ReservationStatus.CANCELLED)
 				.filter(reservation -> command.start().isBefore(reservation.end())
 						&& command.end().isAfter(reservation.start()))
-				.count();
-		if (overlappingReservations >= capacity) {
+				.map(reservation -> new ResourceAvailability.Interval(reservation.start(), reservation.end()))
+				.toList();
+		if (ResourceAvailability.maximumConcurrentReservations(overlappingReservations, command.start(), command.end()) >= capacity) {
 			throw new IllegalStateException("Resource capacity is exceeded for the requested time range");
 		}
 		AggregateLifecycle.apply(new ReservationCreatedEvent(resourceId, command.reservationId(), command.userId(),
@@ -249,6 +299,26 @@ public class ResourceAggregate {
 	}
 
 	@EventSourcingHandler
+	public void on(ResourceBlackoutUpdatedEvent event) {
+		var updated = availabilityRules.blackouts().stream().map(window -> window.windowId().equals(event.windowId())
+				? new AvailabilityWindow(window.windowId(), event.start(), event.end(), AvailabilityWindowType.BLACKOUT,
+						event.reason(), window.createdBy(), window.createdAt())
+				: window).toList();
+		availabilityRules = new ResourceAvailabilityRules(availabilityRules.timezone(), availabilityRules.weeklyPattern(), updated,
+				availabilityRules.extras());
+	}
+
+	@EventSourcingHandler
+	public void on(ResourceExtraAvailabilityUpdatedEvent event) {
+		var updated = availabilityRules.extras().stream().map(window -> window.windowId().equals(event.windowId())
+				? new AvailabilityWindow(window.windowId(), event.start(), event.end(), AvailabilityWindowType.EXTRA,
+						event.reason(), window.createdBy(), window.createdAt())
+				: window).toList();
+		availabilityRules = new ResourceAvailabilityRules(availabilityRules.timezone(), availabilityRules.weeklyPattern(),
+				availabilityRules.blackouts(), updated);
+	}
+
+	@EventSourcingHandler
 	public void on(ResourceAvailabilityClearedEvent event) {
 		availabilityRules = ResourceAvailabilityRules.empty();
 	}
@@ -307,7 +377,64 @@ public class ResourceAggregate {
 	private ResourceAvailabilityRules normalizeRules(String timezone, Map<String, List<AvailabilityTimeRange>> weeklyPattern) {
 		var normalizedPattern = weeklyPattern == null ? Map.<String, List<AvailabilityTimeRange>>of() : weeklyPattern;
 		var effectiveZone = timezone == null || timezone.isBlank() ? null : timezone;
+		if (effectiveZone != null) {
+			ZoneId.of(effectiveZone);
+		}
+		for (var entry : normalizedPattern.entrySet()) {
+			java.time.DayOfWeek.valueOf(entry.getKey());
+			for (var range : entry.getValue()) {
+				if (range.start().equals(range.end())) {
+					throw new IllegalArgumentException("Availability range start and end must differ");
+				}
+			}
+		}
 		return new ResourceAvailabilityRules(effectiveZone, normalizedPattern, availabilityRules.blackouts(), availabilityRules.extras());
+	}
+
+	private void requireAvailabilityTimezone() {
+		if (availabilityRules.timezone() == null || availabilityRules.timezone().isBlank()) {
+			throw new IllegalArgumentException("Set an availability timezone before adding availability windows");
+		}
+	}
+
+	private void requireUnusedWindowId(UUID windowId) {
+		if (windowId == null) {
+			throw new IllegalArgumentException("Availability window ID is required");
+		}
+		if (availabilityRules.blackouts().stream().anyMatch(window -> window.windowId().equals(windowId))
+				|| availabilityRules.extras().stream().anyMatch(window -> window.windowId().equals(windowId))) {
+			throw new IllegalArgumentException("Availability window ID already exists");
+		}
+	}
+
+	private void requireAvailabilityWindowUpdate(UUID userId, Instant start, Instant end) {
+		if (userId == null) {
+			throw new IllegalArgumentException("User identity is required");
+		}
+		requireAvailabilityTimezone();
+		if (start == null || end == null || !end.isAfter(start)) {
+			throw new IllegalArgumentException("Window end must be after start");
+		}
+	}
+
+	private AvailabilityWindow availabilityWindow(List<AvailabilityWindow> windows, UUID windowId, String label) {
+		return windows.stream().filter(window -> window.windowId().equals(windowId)).findFirst()
+				.orElseThrow(() -> new IllegalArgumentException(label + " window does not exist"));
+	}
+
+	private void ensureNoAvailabilityConflicts(ResourceAvailabilityRules proposedRules, boolean rejectConflicts) {
+		List<UUID> conflictingReservations = reservations.stream()
+				.filter(reservation -> reservation.status() != ReservationStatus.CANCELLED)
+				.filter(reservation -> !ResourceAvailability.isFullyAvailable(proposedRules, reservation.start(), reservation.end()))
+				.map(Reservation::reservationId)
+				.toList();
+		if (conflictingReservations.isEmpty()) {
+			return;
+		}
+		if (rejectConflicts) {
+			throw new IllegalStateException("Availability change conflicts with existing reservations: " + conflictingReservations);
+		}
+		log.warn("availability_rule_conflict resource_id={} reservation_ids={}", resourceId, conflictingReservations);
 	}
 
 	private Reservation reservation(UUID reservationId) {

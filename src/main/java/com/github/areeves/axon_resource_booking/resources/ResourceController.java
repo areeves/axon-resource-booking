@@ -2,6 +2,7 @@ package com.github.areeves.axon_resource_booking.resources;
 
 import java.net.URI;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
+import org.springframework.beans.factory.annotation.Value;
 
 import jakarta.validation.Valid;
 
@@ -37,12 +39,15 @@ public class ResourceController {
 	private final CommandGateway commandGateway;
 	private final ResourceRepository resourceRepository;
 	private final ReservationRepository reservationRepository;
+	private final boolean rejectConflictingRuleUpdates;
 
 	public ResourceController(CommandGateway commandGateway, ResourceRepository resourceRepository,
-			ReservationRepository reservationRepository) {
+			ReservationRepository reservationRepository,
+			@Value("${app.availability.reject-conflicting-rule-updates:true}") boolean rejectConflictingRuleUpdates) {
 		this.commandGateway = commandGateway;
 		this.resourceRepository = resourceRepository;
 		this.reservationRepository = reservationRepository;
+		this.rejectConflictingRuleUpdates = rejectConflictingRuleUpdates;
 	}
 
 	@GetMapping
@@ -55,9 +60,14 @@ public class ResourceController {
 		validateTimeWindow(start, end);
 		List<ReservationStatus> activeStatuses = List.of(ReservationStatus.PENDING, ReservationStatus.CONFIRMED);
 		return resourceRepository.findByStatus(ResourceStatus.ACTIVE).stream()
-				.filter(resource -> reservationRepository
-						.findByResourceIdAndStatusInAndStartLessThanAndEndGreaterThan(resource.getResourceId(), activeStatuses,
-								end, start).size() < resource.getCapacity())
+				.filter(resource -> ResourceAvailability.isFullyAvailable(resource.getAvailabilityRules(), start, end))
+				.filter(resource -> {
+					var reservations = reservationRepository.findByResourceIdAndStatusInAndStartLessThanAndEndGreaterThan(
+							resource.getResourceId(), activeStatuses, end, start).stream()
+							.map(reservation -> new ResourceAvailability.Interval(reservation.getStart(), reservation.getEnd()))
+							.toList();
+					return ResourceAvailability.maximumConcurrentReservations(reservations, start, end) < resource.getCapacity();
+				})
 				.toList();
 	}
 
@@ -90,7 +100,10 @@ public class ResourceController {
 						Object startValue = map.get("start");
 						Object endValue = map.get("end");
 						if (startValue != null && endValue != null) {
-							ranges.add(new AvailabilityTimeRange(LocalTime.parse(startValue.toString()), LocalTime.parse(endValue.toString())));
+							Object effectiveFrom = map.get("effectiveFrom");
+							Object effectiveTo = map.get("effectiveTo");
+							ranges.add(new AvailabilityTimeRange(LocalTime.parse(startValue.toString()), LocalTime.parse(endValue.toString()),
+									parseOptionalDate(effectiveFrom), parseOptionalDate(effectiveTo)));
 						}
 					}
 				}
@@ -100,6 +113,10 @@ public class ResourceController {
 			}
 		}
 		return new ResourceAvailabilityRules(timezone, weekly, List.of(), List.of());
+	}
+
+	private LocalDate parseOptionalDate(Object value) {
+		return value == null || value.toString().isBlank() ? null : LocalDate.parse(value.toString());
 	}
 
 	private AvailabilityWindow toWindow(Map<String, Object> payload, UUID resourceId, UUID userId, AvailabilityWindowType type) {
@@ -137,7 +154,8 @@ public class ResourceController {
 	public CompletableFuture<ResponseEntity<Void>> setWeeklyAvailability(@PathVariable UUID resourceId,
 			@RequestHeader("X-User-Id") UUID userId, @RequestBody Map<String, Object> payload) {
 		var rules = parseRules(payload);
-		return commandGateway.send(new UpdateWeeklyAvailabilityPatternCommand(resourceId, userId, rules.timezone(), rules.weeklyPattern()))
+		return commandGateway.send(new UpdateWeeklyAvailabilityPatternCommand(resourceId, userId, rules.timezone(), rules.weeklyPattern(),
+				rejectConflictingRuleUpdates))
 				.thenApply(ignored -> ResponseEntity.noContent().build());
 	}
 
@@ -153,7 +171,7 @@ public class ResourceController {
 			@RequestHeader("X-User-Id") UUID userId, @RequestBody Map<String, Object> payload) {
 		var window = toWindow(payload, resourceId, userId, AvailabilityWindowType.BLACKOUT);
 		return commandGateway.send(new AddResourceBlackoutCommand(resourceId, userId, window.windowId(), window.start(),
-				window.end(), window.reason())).thenApply(ignored -> ResponseEntity.noContent().build());
+				window.end(), window.reason(), rejectConflictingRuleUpdates)).thenApply(ignored -> ResponseEntity.noContent().build());
 	}
 
 	@PostMapping("/{resourceId}/availability/extra")
@@ -162,6 +180,22 @@ public class ResourceController {
 		var window = toWindow(payload, resourceId, userId, AvailabilityWindowType.EXTRA);
 		return commandGateway.send(new AddResourceExtraAvailabilityCommand(resourceId, userId, window.windowId(), window.start(),
 				window.end(), window.reason())).thenApply(ignored -> ResponseEntity.noContent().build());
+	}
+
+	@PutMapping("/{resourceId}/availability/blackouts/{windowId}")
+	public CompletableFuture<ResponseEntity<Void>> updateBlackout(@PathVariable UUID resourceId,
+			@PathVariable UUID windowId, @RequestHeader("X-User-Id") UUID userId, @RequestBody Map<String, Object> payload) {
+		var window = toWindow(payload, resourceId, userId, AvailabilityWindowType.BLACKOUT);
+		return commandGateway.send(new UpdateResourceBlackoutCommand(resourceId, userId, windowId, window.start(), window.end(),
+				window.reason(), rejectConflictingRuleUpdates)).thenApply(ignored -> ResponseEntity.noContent().build());
+	}
+
+	@PutMapping("/{resourceId}/availability/extra/{windowId}")
+	public CompletableFuture<ResponseEntity<Void>> updateExtraWindow(@PathVariable UUID resourceId,
+			@PathVariable UUID windowId, @RequestHeader("X-User-Id") UUID userId, @RequestBody Map<String, Object> payload) {
+		var window = toWindow(payload, resourceId, userId, AvailabilityWindowType.EXTRA);
+		return commandGateway.send(new UpdateResourceExtraAvailabilityCommand(resourceId, userId, windowId, window.start(),
+				window.end(), window.reason(), rejectConflictingRuleUpdates)).thenApply(ignored -> ResponseEntity.noContent().build());
 	}
 
 	@DeleteMapping("/{resourceId}/availability/blackouts/{windowId}")
@@ -174,7 +208,7 @@ public class ResourceController {
 	@DeleteMapping("/{resourceId}/availability/extra/{windowId}")
 	public CompletableFuture<ResponseEntity<Void>> removeExtra(@PathVariable UUID resourceId,
 			@PathVariable UUID windowId, @RequestHeader("X-User-Id") UUID userId) {
-		return commandGateway.send(new RemoveResourceExtraAvailabilityCommand(resourceId, userId, windowId))
+		return commandGateway.send(new RemoveResourceExtraAvailabilityCommand(resourceId, userId, windowId, rejectConflictingRuleUpdates))
 				.thenApply(ignored -> ResponseEntity.noContent().build());
 	}
 

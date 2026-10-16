@@ -44,6 +44,8 @@ export interface DateTimeRange {
 export interface AvailabilityTimeRange {
   start: string;
   end: string;
+  effectiveFrom?: string | null;
+  effectiveTo?: string | null;
 }
 
 export interface AvailabilityWindow {
@@ -89,6 +91,7 @@ export interface UtilizationForm {
 export interface UtilizationRow {
   date: string;
   reservationCount: number;
+  bookableHours: number;
   occupiedHours: number;
   utilizationPercent: number;
 }

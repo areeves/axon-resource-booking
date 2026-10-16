@@ -4,6 +4,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
 
-public record ResourceDailyUtilization(UUID resourceId, LocalDate date, long reservationCount, BigDecimal occupiedHours,
-		BigDecimal utilizationPercent) {
+public record ResourceDailyUtilization(UUID resourceId, LocalDate date, long reservationCount, BigDecimal bookableHours,
+		BigDecimal occupiedHours, BigDecimal utilizationPercent) {
 }

@@ -63,17 +63,20 @@ public class ResourceProjection {
 
 	@EventHandler
 	public void on(ResourceAvailabilityRulesUpdatedEvent event) {
+		recordEvent("availability_rules_updated", event.resourceId());
 		updateAvailability(event.resourceId(), ignored -> new ResourceAvailabilityRules(
 				event.timezone(), event.weeklyPattern(), event.blackouts(), event.extras()));
 	}
 
 	@EventHandler
 	public void on(ResourceAvailabilityClearedEvent event) {
+		recordEvent("availability_cleared", event.resourceId());
 		updateAvailability(event.resourceId(), ignored -> ResourceAvailabilityRules.empty());
 	}
 
 	@EventHandler
 	public void on(ResourceBlackoutAddedEvent event) {
+		recordEvent("blackout_added", event.resourceId());
 		updateAvailability(event.resourceId(), rules -> {
 			var blackouts = new ArrayList<>(rules.blackouts());
 			blackouts.add(new AvailabilityWindow(event.windowId(), event.start(), event.end(), AvailabilityWindowType.BLACKOUT,
@@ -84,6 +87,7 @@ public class ResourceProjection {
 
 	@EventHandler
 	public void on(ResourceExtraAvailabilityAddedEvent event) {
+		recordEvent("extra_availability_added", event.resourceId());
 		updateAvailability(event.resourceId(), rules -> {
 			var extras = new ArrayList<>(rules.extras());
 			extras.add(new AvailabilityWindow(event.windowId(), event.start(), event.end(), AvailabilityWindowType.EXTRA,
@@ -93,7 +97,28 @@ public class ResourceProjection {
 	}
 
 	@EventHandler
+	public void on(ResourceBlackoutUpdatedEvent event) {
+		recordEvent("blackout_updated", event.resourceId());
+		updateAvailability(event.resourceId(), rules -> new ResourceAvailabilityRules(rules.timezone(), rules.weeklyPattern(),
+				rules.blackouts().stream().map(window -> window.windowId().equals(event.windowId())
+						? new AvailabilityWindow(window.windowId(), event.start(), event.end(), AvailabilityWindowType.BLACKOUT,
+								event.reason(), window.createdBy(), window.createdAt())
+						: window).toList(), rules.extras()));
+	}
+
+	@EventHandler
+	public void on(ResourceExtraAvailabilityUpdatedEvent event) {
+		recordEvent("extra_availability_updated", event.resourceId());
+		updateAvailability(event.resourceId(), rules -> new ResourceAvailabilityRules(rules.timezone(), rules.weeklyPattern(),
+				rules.blackouts(), rules.extras().stream().map(window -> window.windowId().equals(event.windowId())
+						? new AvailabilityWindow(window.windowId(), event.start(), event.end(), AvailabilityWindowType.EXTRA,
+								event.reason(), window.createdBy(), window.createdAt())
+						: window).toList()));
+	}
+
+	@EventHandler
 	public void on(ResourceBlackoutRemovedEvent event) {
+		recordEvent("blackout_removed", event.resourceId());
 		updateAvailability(event.resourceId(), rules -> new ResourceAvailabilityRules(rules.timezone(), rules.weeklyPattern(),
 				rules.blackouts().stream().filter(window -> !window.windowId().equals(event.windowId())).toList(),
 				rules.extras()));
@@ -101,6 +126,7 @@ public class ResourceProjection {
 
 	@EventHandler
 	public void on(ResourceExtraAvailabilityRemovedEvent event) {
+		recordEvent("extra_availability_removed", event.resourceId());
 		updateAvailability(event.resourceId(), rules -> new ResourceAvailabilityRules(rules.timezone(), rules.weeklyPattern(),
 				rules.blackouts(),
 				rules.extras().stream().filter(window -> !window.windowId().equals(event.windowId())).toList()));

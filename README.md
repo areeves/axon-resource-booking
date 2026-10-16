@@ -71,6 +71,15 @@ All REST endpoints require HTTP Basic authentication. Use the default credential
 - Username: admin
 - Password: admin
 
+A non-admin demo account is also available for owner-scoped reservation actions:
+
+- Username / actor UUID: `00000000-0000-0000-0000-000000000001`
+- Password: `user`
+
+Non-admin requests must send an `X-User-Id` matching the authenticated account. Configure the demo actor and password with `APP_SECURITY_USER_ID` and `APP_SECURITY_USER_PASSWORD`. Administrators may act as another supplied actor UUID.
+
+Availability rule changes that would put existing pending or confirmed reservations outside bookable hours are rejected by default. Set `APP_AVAILABILITY_REJECT_CONFLICTING_RULE_UPDATES=false` to allow such changes; the aggregate logs the affected reservation IDs. Existing reservations are never automatically changed or cancelled.
+
 ## Web console
 
 Open the frontend URL (http://localhost with Docker Compose, or the Vite URL printed by `npm run dev`) to manage resources and reservations, inspect reservation events, view daily utilization, and rebuild projections. The console asks for API credentials and an actor UUID; the password is kept only in the current page session. The Spring API at http://localhost:8080 does not serve the web console.
@@ -86,10 +95,13 @@ OpenAPI documentation is available at:
 
 - Health: http://localhost:8080/actuator/health
 - Prometheus metrics: http://localhost:8080/actuator/prometheus
-- Event store inspection: use the reservation event endpoint at /reservations/{reservationId}/events
+- Reservation history: `/reservations/{reservationId}/events`
+- Full aggregate event stream (admin): `GET /admin/events/{aggregateId}`
 - Daily resource utilization: GET /resources/{resourceId}/utilization?from=YYYY-MM-DD&to=YYYY-MM-DD
+- Availability calendar: `GET /resources/{resourceId}/availability/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD&slotMinutes=60`
+- Next available slots: `GET /resources/{resourceId}/availability/next-slots?after=ISO-8601&durationMinutes=60&count=5`
 
-Utilization is projected per UTC day from pending and confirmed reservations. Each daily result includes the reservation count, occupied hours, and the percentage of the resource's capacity-hours used. Date ranges are inclusive and limited to 366 days; days without bookings are returned with zero totals.
+Utilization is projected from pending and confirmed reservations. Each daily result includes the reservation count, scheduled bookable hours, occupied hours, and the percentage of scheduled capacity-hours used. Dates are grouped in UTC; bookable hours use the resource's configured availability timezone. Date ranges are inclusive and limited to 366 days; days without bookings are returned with zero totals.
 
 ## Rebuilding projections
 

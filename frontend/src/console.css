@@ -142,6 +142,7 @@ input::placeholder, textarea::placeholder { color: #a4afa8; }
 .weekly-ranges { display: grid; gap: 5px; }
 .weekly-range { display: flex; align-items: center; gap: 7px; }
 .weekly-range input { width: 112px; padding: 6px; font: 10px var(--mono); }
+.weekly-range input[type=date] { width: 138px; }
 .weekly-range > span { color: var(--muted); font-size: 10px; }
 .weekly-range .text-button, .add-hours-button { padding: 5px; font-size: 10px; }
 .weekly-availability-form > .small-action { justify-self: end; }
@@ -152,6 +153,10 @@ input::placeholder, textarea::placeholder { color: #a4afa8; }
 .availability-windows { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
 .availability-windows li { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid #edf0ed; padding: 8px 0; color: #586c5e; font-size: 10px; }
 .availability-windows li > div { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.window-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 4px; }
+.window-edit-form { display: grid; width: 100%; grid-template-columns: repeat(3, minmax(120px, 1fr)) auto; align-items: end; gap: 8px; }
+.window-edit-form label { display: grid; gap: 4px; color: #738078; font-size: 10px; }
+.window-edit-form input { width: 100%; padding: 7px; font-size: 10px; }
 .window-type { border-radius: 99px; padding: 2px 7px; color: #557250; background: #edf4e6; font: 9px var(--mono); }
 .window-type.blackout { color: #a24b3c; background: #fbefec; }
 .window-reason { color: var(--muted); font-style: italic; }
@@ -264,6 +269,7 @@ td code { display: inline-block; max-width: 160px; overflow: hidden; color: #627
   .weekly-range { flex-wrap: wrap; }
   .weekly-range input { width: 96px; }
   .window-form { grid-template-columns: 1fr 1fr; }
+  .window-edit-form { grid-template-columns: 1fr 1fr; }
   .window-form > .small-action { justify-self: start; }
   .reserve-form-grid { grid-template-columns: 1fr 1fr; }
   .reserve-form-grid label:first-child { grid-column: 1 / -1; }

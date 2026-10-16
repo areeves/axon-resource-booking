@@ -50,6 +50,8 @@ const weeklyTimezone = ref(Intl.DateTimeFormat().resolvedOptions().timeZone);
 const availabilityWindowDraft = ref<DateTimeRange>({ start: '', end: '' });
 const availabilityWindowReason = ref('');
 const availabilityWindowType = ref<'BLACKOUT' | 'EXTRA'>('BLACKOUT');
+const editingAvailabilityWindowId = ref('');
+const availabilityWindowEditDraft = reactive({ start: '', end: '', reason: '' });
 const availabilityLoading = ref(false);
 let availabilityRequestId = 0;
 const weekdays = [
@@ -93,6 +95,7 @@ function emptyAvailabilityRules(): ResourceAvailabilityRules {
 
 async function loadAvailability(resourceId: string): Promise<void> {
   const requestId = ++availabilityRequestId;
+  editingAvailabilityWindowId.value = '';
   availabilityLoading.value = true;
   availabilityRules.value = emptyAvailabilityRules();
   try {
@@ -108,7 +111,9 @@ async function loadAvailability(resourceId: string): Promise<void> {
           day,
           ranges.map((range) => ({
             start: range.start.slice(0, 5),
-            end: range.end.slice(0, 5)
+            end: range.end.slice(0, 5),
+            effectiveFrom: range.effectiveFrom ?? '',
+            effectiveTo: range.effectiveTo ?? ''
           }))
         ])
       ),
@@ -152,12 +157,19 @@ async function saveWeeklyAvailability(): Promise<void> {
   for (const { name } of weekdays) {
     const ranges = availabilityRules.value.weeklyPattern[name] ?? [];
     for (const range of ranges) {
-      if (!range.start || !range.end || range.start === range.end) {
-        notify('Each weekly availability range must have different start and end times.', true);
+      if (!range.start || !range.end || range.start === range.end
+          || (range.effectiveFrom && range.effectiveTo && range.effectiveTo < range.effectiveFrom)) {
+        notify('Check each weekly time range and its optional effective date range.', true);
         return;
       }
     }
-    if (ranges.length) weeklyPattern[name] = ranges;
+    if (ranges.length) {
+      weeklyPattern[name] = ranges.map((range) => ({
+        ...range,
+        effectiveFrom: range.effectiveFrom || null,
+        effectiveTo: range.effectiveTo || null
+      }));
+    }
   }
   await runAction(
     () => api<unknown>(`/resources/${resource.resourceId}/availability/weekly`, {
@@ -173,7 +185,11 @@ async function saveWeeklyAvailability(): Promise<void> {
         weeklyPattern: Object.fromEntries(
           Object.entries(weeklyPattern).map(([day, ranges]) => [
             day,
-            ranges.map((range) => ({ ...range }))
+            ranges.map((range) => ({
+              ...range,
+              effectiveFrom: range.effectiveFrom || '',
+              effectiveTo: range.effectiveTo || ''
+            }))
           ])
         )
       };
@@ -185,6 +201,10 @@ async function saveWeeklyAvailability(): Promise<void> {
 async function addAvailabilityWindow(): Promise<void> {
   const resource = currentResource.value;
   if (!resource) return;
+  if (!availabilityRules.value.timezone) {
+    notify('Save the availability timezone before adding a one-off window.', true);
+    return;
+  }
   const start = new Date(availabilityWindowDraft.value.start);
   const end = new Date(availabilityWindowDraft.value.end);
   if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) {
@@ -225,6 +245,48 @@ async function removeAvailabilityWindow(window: AvailabilityWindow): Promise<voi
     window.type === 'BLACKOUT' ? 'Blackout removed' : 'Extra availability removed',
     () => loadAvailability(resource.resourceId)
   );
+}
+
+function editAvailabilityWindow(window: AvailabilityWindow): void {
+  editingAvailabilityWindowId.value = window.windowId;
+  availabilityWindowEditDraft.start = toLocalInput(new Date(window.start));
+  availabilityWindowEditDraft.end = toLocalInput(new Date(window.end));
+  availabilityWindowEditDraft.reason = window.reason ?? '';
+}
+
+async function saveAvailabilityWindow(window: AvailabilityWindow): Promise<void> {
+  const resource = currentResource.value;
+  if (!resource) return;
+  const start = new Date(availabilityWindowEditDraft.start);
+  const end = new Date(availabilityWindowEditDraft.end);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) {
+    notify('End time must be after start time.', true);
+    return;
+  }
+  const type = window.type === 'BLACKOUT' ? 'blackouts' : 'extra';
+  await runAction(
+    () => api<unknown>(
+      `/resources/${resource.resourceId}/availability/${type}/${encodeURIComponent(window.windowId)}`,
+      {
+        method: 'PUT',
+        userScoped: true,
+        body: {
+          start: start.toISOString(),
+          end: end.toISOString(),
+          reason: availabilityWindowEditDraft.reason.trim() || null
+        }
+      }
+    ),
+    window.type === 'BLACKOUT' ? 'Blackout updated' : 'Extra availability updated',
+    async () => {
+      editingAvailabilityWindowId.value = '';
+      await loadAvailability(resource.resourceId);
+    }
+  );
+}
+
+function cancelAvailabilityWindowEdit(): void {
+  editingAvailabilityWindowId.value = '';
 }
 
 async function clearAvailability(): Promise<void> {
@@ -649,6 +711,16 @@ onMounted(() => {
                           :aria-label="`${day.label} end time`"
                           required
                         >
+                        <input
+                          v-model="range.effectiveFrom"
+                          type="date"
+                          :aria-label="`${day.label} effective from date`"
+                        >
+                        <input
+                          v-model="range.effectiveTo"
+                          type="date"
+                          :aria-label="`${day.label} effective to date`"
+                        >
                         <button
                           class="text-button"
                           type="button"
@@ -707,21 +779,36 @@ onMounted(() => {
                     v-for="window in [...availabilityRules.blackouts, ...availabilityRules.extras]"
                     :key="window.windowId"
                   >
-                    <div>
-                      <span class="window-type" :class="{ blackout: window.type === 'BLACKOUT' }">
-                        {{ window.type === 'BLACKOUT' ? 'Blackout' : 'Extra' }}
-                      </span>
-                      <span>{{ formatAvailabilityWindow(window.start) }} – {{ formatAvailabilityWindow(window.end) }}</span>
-                      <span v-if="window.reason" class="window-reason">{{ window.reason }}</span>
-                    </div>
-                    <button
-                      class="text-button"
-                      type="button"
-                      :disabled="busy"
-                      @click="removeAvailabilityWindow(window)"
+                    <form
+                      v-if="editingAvailabilityWindowId === window.windowId"
+                      class="window-edit-form"
+                      @submit.prevent="saveAvailabilityWindow(window)"
                     >
-                      Remove
-                    </button>
+                      <label>Start<input v-model="availabilityWindowEditDraft.start" type="datetime-local" required></label>
+                      <label>End<input v-model="availabilityWindowEditDraft.end" type="datetime-local" required></label>
+                      <label>Reason<input v-model="availabilityWindowEditDraft.reason" type="text" maxlength="240"></label>
+                      <div class="window-actions">
+                        <button class="small-action" type="submit" :disabled="busy">Save</button>
+                        <button class="text-button" type="button" @click="cancelAvailabilityWindowEdit">Cancel</button>
+                      </div>
+                    </form>
+                    <template v-else>
+                      <div>
+                        <span class="window-type" :class="{ blackout: window.type === 'BLACKOUT' }">
+                          {{ window.type === 'BLACKOUT' ? 'Blackout' : 'Extra' }}
+                        </span>
+                        <span>{{ formatAvailabilityWindow(window.start) }} – {{ formatAvailabilityWindow(window.end) }}</span>
+                        <span v-if="window.reason" class="window-reason">{{ window.reason }}</span>
+                      </div>
+                      <div class="window-actions">
+                        <button class="text-button" type="button" :disabled="busy" @click="editAvailabilityWindow(window)">
+                          Edit
+                        </button>
+                        <button class="text-button" type="button" :disabled="busy" @click="removeAvailabilityWindow(window)">
+                          Remove
+                        </button>
+                      </div>
+                    </template>
                   </li>
                 </ul>
               </div>

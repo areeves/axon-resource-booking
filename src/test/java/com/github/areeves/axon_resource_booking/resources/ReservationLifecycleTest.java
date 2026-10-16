@@ -51,6 +51,34 @@ class ReservationLifecycleTest {
 	}
 
 	@Test
+	void allowsReservationWhenExistingBookingsOverlapDifferentPartsOfWindow() {
+		Instant midpoint = start.plusSeconds(1800);
+		ResourceCreatedEvent resource = new ResourceCreatedEvent(resourceId, "Room A", null, 2, "Floor 1", Instant.now());
+		ReservationCreatedEvent firstReservation = new ReservationCreatedEvent(resourceId, firstReservationId, firstUserId,
+				start, midpoint, ReservationStatus.PENDING, Instant.now());
+		ReservationCreatedEvent secondReservation = new ReservationCreatedEvent(resourceId, UUID.randomUUID(), UUID.randomUUID(),
+				midpoint, end, ReservationStatus.PENDING, Instant.now());
+
+		fixture.given(resource, firstReservation, secondReservation)
+				.when(new ReserveResourceCommand(resourceId, UUID.randomUUID(), UUID.randomUUID(), start.plusSeconds(900),
+						end.minusSeconds(900)))
+				.expectSuccessfulHandlerExecution();
+	}
+
+	@Test
+	void rejectsAvailabilityChangesThatWouldInvalidateExistingReservations() {
+		ResourceCreatedEvent resource = new ResourceCreatedEvent(resourceId, "Room A", null, 1, "Floor 1", Instant.now());
+		ReservationCreatedEvent reservation = new ReservationCreatedEvent(resourceId, firstReservationId, firstUserId,
+				start, end, ReservationStatus.CONFIRMED, Instant.now());
+		ResourceAvailabilityRulesUpdatedEvent timezoneSet = new ResourceAvailabilityRulesUpdatedEvent(resourceId, "UTC",
+				java.util.Map.of(), java.util.List.of(), java.util.List.of(), Instant.now());
+
+		fixture.given(resource, timezoneSet, reservation)
+				.when(new AddResourceBlackoutCommand(resourceId, UUID.randomUUID(), UUID.randomUUID(), start, end, "Maintenance", true))
+				.expectException(IllegalStateException.class);
+	}
+
+	@Test
 	void cancelledReservationFreesCapacityAndWrongUserCannotCancel() {
 		ResourceCreatedEvent resource = new ResourceCreatedEvent(resourceId, "Room A", null, 1, "Floor 1", Instant.now());
 		ReservationCreatedEvent firstReservation = new ReservationCreatedEvent(resourceId, firstReservationId, firstUserId,

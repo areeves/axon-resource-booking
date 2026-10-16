@@ -23,20 +23,27 @@ public final class ResourceAvailability {
 		List<Interval> open = new ArrayList<>();
 		String timezone = rules.timezone();
 		var zone = timezone == null || timezone.isBlank() ? java.time.ZoneOffset.UTC : java.time.ZoneId.of(timezone);
-		var fromDate = start.atZone(zone).toLocalDate();
-		var toDate = end.atZone(zone).toLocalDate();
-		for (var date = fromDate.minusDays(1); !date.isAfter(toDate.plusDays(1)); date = date.plusDays(1)) {
-			var dayName = date.getDayOfWeek().name();
-			for (var range : rules.weeklyPattern().getOrDefault(dayName, List.of())) {
-				var from = date.atTime(range.start()).atZone(zone).toInstant();
-				var to = date.atTime(range.end()).atZone(zone).toInstant();
-				if (!to.isAfter(from)) {
-					to = date.plusDays(1).atTime(range.end()).atZone(zone).toInstant();
+		if (rules.weeklyPattern().isEmpty()) {
+			open.add(new Interval(start, end));
+		} else {
+			var fromDate = start.atZone(zone).toLocalDate();
+			var toDate = end.atZone(zone).toLocalDate();
+			for (var date = fromDate.minusDays(1); !date.isAfter(toDate.plusDays(1)); date = date.plusDays(1)) {
+				var dayName = date.getDayOfWeek().name();
+				for (var range : rules.weeklyPattern().getOrDefault(dayName, List.of())) {
+					if (!isEffectiveOn(range, date)) {
+						continue;
+					}
+					var from = date.atTime(range.start()).atZone(zone).toInstant();
+					var to = date.atTime(range.end()).atZone(zone).toInstant();
+					if (!to.isAfter(from)) {
+						to = date.plusDays(1).atTime(range.end()).atZone(zone).toInstant();
+					}
+					if (to.isBefore(start) || from.isAfter(end)) {
+						continue;
+					}
+					open.add(new Interval(max(from, start), min(to, end)));
 				}
-				if (to.isBefore(start) || from.isAfter(end)) {
-					continue;
-				}
-				open.add(new Interval(max(from, start), min(to, end)));
 			}
 		}
 		for (var window : extraWindows) {
@@ -60,15 +67,22 @@ public final class ResourceAvailability {
 		}
 		List<Interval> intervals = new ArrayList<>();
 		var timezone = rules.timezone() == null || rules.timezone().isBlank() ? java.time.ZoneOffset.UTC : java.time.ZoneId.of(rules.timezone());
-		for (var date = start.atZone(timezone).toLocalDate().minusDays(1); !date.isAfter(end.atZone(timezone).toLocalDate().plusDays(1)); date = date.plusDays(1)) {
-			for (var range : rules.weeklyPattern().getOrDefault(date.getDayOfWeek().name(), List.of())) {
-				var candidateStart = date.atTime(range.start()).atZone(timezone).toInstant();
-				var candidateEnd = date.atTime(range.end()).atZone(timezone).toInstant();
-				if (!candidateEnd.isAfter(candidateStart)) {
-					candidateEnd = date.plusDays(1).atTime(range.end()).atZone(timezone).toInstant();
-				}
-				if (candidateEnd.isAfter(start) && candidateStart.isBefore(end)) {
-					intervals.add(new Interval(max(candidateStart, start), min(candidateEnd, end)));
+		if (rules.weeklyPattern().isEmpty()) {
+			intervals.add(new Interval(start, end));
+		} else {
+			for (var date = start.atZone(timezone).toLocalDate().minusDays(1); !date.isAfter(end.atZone(timezone).toLocalDate().plusDays(1)); date = date.plusDays(1)) {
+				for (var range : rules.weeklyPattern().getOrDefault(date.getDayOfWeek().name(), List.of())) {
+					if (!isEffectiveOn(range, date)) {
+						continue;
+					}
+					var candidateStart = date.atTime(range.start()).atZone(timezone).toInstant();
+					var candidateEnd = date.atTime(range.end()).atZone(timezone).toInstant();
+					if (!candidateEnd.isAfter(candidateStart)) {
+						candidateEnd = date.plusDays(1).atTime(range.end()).atZone(timezone).toInstant();
+					}
+					if (candidateEnd.isAfter(start) && candidateStart.isBefore(end)) {
+						intervals.add(new Interval(max(candidateStart, start), min(candidateEnd, end)));
+					}
 				}
 			}
 		}
@@ -85,6 +99,30 @@ public final class ResourceAvailability {
 			}
 		}
 		return mergeIntervals(intervals);
+	}
+
+	public static long maximumConcurrentReservations(List<Interval> reservations, Instant start, Instant end) {
+		if (reservations == null || start == null || end == null || !end.isAfter(start)) {
+			return 0;
+		}
+		List<OccupancyChange> changes = new ArrayList<>();
+		for (var reservation : reservations) {
+			Instant clippedStart = max(reservation.start(), start);
+			Instant clippedEnd = min(reservation.end(), end);
+			if (clippedStart.isBefore(clippedEnd)) {
+				changes.add(new OccupancyChange(clippedStart, 1));
+				changes.add(new OccupancyChange(clippedEnd, -1));
+			}
+		}
+		changes.sort(Comparator.comparing(OccupancyChange::at).thenComparingInt(OccupancyChange::delta));
+
+		long current = 0;
+		long maximum = 0;
+		for (var change : changes) {
+			current += change.delta();
+			maximum = Math.max(maximum, current);
+		}
+		return maximum;
 	}
 
 	private static boolean coversInterval(List<Interval> intervals, Instant start, Instant end) {
@@ -104,6 +142,11 @@ public final class ResourceAvailability {
 		return cursor.equals(end);
 	}
 
+	private static boolean isEffectiveOn(AvailabilityTimeRange range, java.time.LocalDate date) {
+		return (range.effectiveFrom() == null || !date.isBefore(range.effectiveFrom()))
+				&& (range.effectiveTo() == null || !date.isAfter(range.effectiveTo()));
+	}
+
 	private static List<Interval> subtractIntervals(List<Interval> intervals, List<Interval> exclusions) {
 		List<Interval> result = new ArrayList<>();
 		for (var interval : intervals) {
@@ -112,7 +155,7 @@ public final class ResourceAvailability {
 			for (var exclusion : exclusions) {
 				List<Interval> next = new ArrayList<>();
 				for (var part : remaining) {
-					if (part.end().isBefore(exclusion.start()) || part.start().isAfter(exclusion.end())) {
+					if (!part.end().isAfter(exclusion.start()) || !part.start().isBefore(exclusion.end())) {
 						next.add(part);
 						continue;
 					}
@@ -160,6 +203,9 @@ public final class ResourceAvailability {
 			Objects.requireNonNull(start, "start is required");
 			Objects.requireNonNull(end, "end is required");
 		}
+	}
+
+	private record OccupancyChange(Instant at, int delta) {
 	}
 
 	private static Instant max(Instant left, Instant right) {

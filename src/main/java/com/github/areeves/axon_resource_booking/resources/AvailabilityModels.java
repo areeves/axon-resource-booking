@@ -1,6 +1,7 @@
 package com.github.areeves.axon_resource_booking.resources;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -11,10 +12,17 @@ import java.util.UUID;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
-record AvailabilityTimeRange(LocalTime start, LocalTime end) {
+record AvailabilityTimeRange(LocalTime start, LocalTime end, LocalDate effectiveFrom, LocalDate effectiveTo) {
+	public AvailabilityTimeRange(LocalTime start, LocalTime end) {
+		this(start, end, null, null);
+	}
+
 	public AvailabilityTimeRange {
 		Objects.requireNonNull(start, "start is required");
 		Objects.requireNonNull(end, "end is required");
+		if (effectiveFrom != null && effectiveTo != null && effectiveTo.isBefore(effectiveFrom)) {
+			throw new IllegalArgumentException("effectiveTo must be on or after effectiveFrom");
+		}
 	}
 }
 
@@ -69,7 +77,8 @@ record ResourceAvailabilityRules(String timezone,
 }
 
 record UpdateWeeklyAvailabilityPatternCommand(@org.axonframework.modelling.command.TargetAggregateIdentifier UUID resourceId,
-		UUID userId, String timezone, Map<String, List<AvailabilityTimeRange>> weeklyPattern) {
+		UUID userId, String timezone, Map<String, List<AvailabilityTimeRange>> weeklyPattern,
+		boolean rejectConflictingReservations) {
 }
 
 record ClearResourceAvailabilityCommand(@org.axonframework.modelling.command.TargetAggregateIdentifier UUID resourceId,
@@ -77,11 +86,19 @@ record ClearResourceAvailabilityCommand(@org.axonframework.modelling.command.Tar
 }
 
 record AddResourceBlackoutCommand(@org.axonframework.modelling.command.TargetAggregateIdentifier UUID resourceId,
-		UUID userId, UUID windowId, Instant start, Instant end, String reason) {
+		UUID userId, UUID windowId, Instant start, Instant end, String reason, boolean rejectConflictingReservations) {
 }
 
 record AddResourceExtraAvailabilityCommand(@org.axonframework.modelling.command.TargetAggregateIdentifier UUID resourceId,
 		UUID userId, UUID windowId, Instant start, Instant end, String reason) {
+}
+
+record UpdateResourceBlackoutCommand(@org.axonframework.modelling.command.TargetAggregateIdentifier UUID resourceId,
+		UUID userId, UUID windowId, Instant start, Instant end, String reason, boolean rejectConflictingReservations) {
+}
+
+record UpdateResourceExtraAvailabilityCommand(@org.axonframework.modelling.command.TargetAggregateIdentifier UUID resourceId,
+		UUID userId, UUID windowId, Instant start, Instant end, String reason, boolean rejectConflictingReservations) {
 }
 
 record RemoveResourceBlackoutCommand(@org.axonframework.modelling.command.TargetAggregateIdentifier UUID resourceId,
@@ -89,7 +106,7 @@ record RemoveResourceBlackoutCommand(@org.axonframework.modelling.command.Target
 }
 
 record RemoveResourceExtraAvailabilityCommand(@org.axonframework.modelling.command.TargetAggregateIdentifier UUID resourceId,
-		UUID userId, UUID windowId) {
+		UUID userId, UUID windowId, boolean rejectConflictingReservations) {
 }
 
 record ResourceAvailabilityRulesUpdatedEvent(UUID resourceId, String timezone,
@@ -108,6 +125,14 @@ record ResourceBlackoutAddedEvent(UUID resourceId, UUID windowId, Instant start,
 
 record ResourceExtraAvailabilityAddedEvent(UUID resourceId, UUID windowId, Instant start, Instant end,
 		String reason, UUID createdBy, Instant createdAt) {
+}
+
+record ResourceBlackoutUpdatedEvent(UUID resourceId, UUID windowId, Instant start, Instant end,
+		String reason, UUID updatedBy, Instant updatedAt) {
+}
+
+record ResourceExtraAvailabilityUpdatedEvent(UUID resourceId, UUID windowId, Instant start, Instant end,
+		String reason, UUID updatedBy, Instant updatedAt) {
 }
 
 record ResourceBlackoutRemovedEvent(UUID resourceId, UUID windowId, Instant updatedAt) {

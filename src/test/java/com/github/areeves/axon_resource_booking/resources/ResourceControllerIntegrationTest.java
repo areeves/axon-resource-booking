@@ -1,18 +1,25 @@
 package com.github.areeves.axon_resource_booking.resources;
 
+import java.math.BigDecimal;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
 import java.time.Duration;
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneOffset;
+import java.time.temporal.TemporalAdjusters;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import io.micrometer.core.instrument.MeterRegistry;
@@ -152,6 +159,39 @@ class ResourceControllerIntegrationTest {
 	}
 
 	@Test
+	void updatesAndProjectsAnExistingBlackoutWindow() throws Exception {
+		UUID resourceId = UUID.randomUUID();
+		UUID userId = UUID.randomUUID();
+		UUID windowId = UUID.randomUUID();
+		Instant originalStart = Instant.now().plusSeconds(86_400);
+		Instant originalEnd = originalStart.plusSeconds(3600);
+		Instant updatedStart = originalStart.plusSeconds(7200);
+		Instant updatedEnd = updatedStart.plusSeconds(3600);
+		commandGateway.sendAndWait(new CreateResourceCommand(resourceId, userId, "Window Room", null, 1, "Floor 1"));
+		commandGateway.sendAndWait(new UpdateWeeklyAvailabilityPatternCommand(resourceId, userId, "UTC", Map.of(), true));
+		commandGateway.sendAndWait(new AddResourceBlackoutCommand(resourceId, userId, windowId, originalStart, originalEnd,
+				"Maintenance", true));
+
+		await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+				assertThat(resourceRepository.findById(resourceId).orElseThrow().getAvailabilityRules().blackouts()).hasSize(1));
+		var updateResult = mockMvc.perform(put("/resources/{resourceId}/availability/blackouts/{windowId}", resourceId, windowId)
+				.with(httpBasic("admin", "admin"))
+				.header("X-User-Id", userId)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+						{"start":"%s","end":"%s","reason":"Updated maintenance"}
+						""".formatted(updatedStart, updatedEnd)))
+				.andExpect(request().asyncStarted())
+				.andReturn();
+		mockMvc.perform(asyncDispatch(updateResult)).andExpect(status().isNoContent());
+		await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+			var blackout = resourceRepository.findById(resourceId).orElseThrow().getAvailabilityRules().blackouts().getFirst();
+			assertThat(blackout.start()).isEqualTo(updatedStart);
+			assertThat(blackout.reason()).isEqualTo("Updated maintenance");
+		});
+	}
+
+	@Test
 	void rejectsDuplicateResourceName() throws Exception {
 		resourceRepository.save(ResourceEntity.from(new ResourceCreatedEvent(UUID.randomUUID(), "Room A", null, 4,
 				"Floor 1", Instant.now())));
@@ -195,6 +235,28 @@ class ResourceControllerIntegrationTest {
 						{"userId":"%s","start":"%s","end":"%s"}
 						""".formatted(UUID.randomUUID(), Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200))))
 				.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void nonAdminMayOnlyActAsTheUuidBoundToItsBasicUser() throws Exception {
+		UUID resourceId = UUID.randomUUID();
+		UUID userId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+		UUID reservationId = UUID.randomUUID();
+		Instant start = Instant.now().plusSeconds(3600);
+		commandGateway.sendAndWait(new CreateResourceCommand(resourceId, userId, "User-owned Room", null, 1, "Floor 1"));
+		commandGateway.sendAndWait(new ReserveResourceCommand(resourceId, reservationId, userId, start, start.plusSeconds(3600)));
+
+		mockMvc.perform(post("/resources/{resourceId}/reservations/{reservationId}/cancel", resourceId, reservationId)
+				.with(httpBasic(userId.toString(), "user"))
+				.header("X-User-Id", UUID.randomUUID()))
+				.andExpect(status().isForbidden());
+
+		var cancelResult = mockMvc.perform(post("/resources/{resourceId}/reservations/{reservationId}/cancel", resourceId, reservationId)
+				.with(httpBasic(userId.toString(), "user"))
+				.header("X-User-Id", userId))
+				.andExpect(request().asyncStarted())
+				.andReturn();
+		mockMvc.perform(asyncDispatch(cancelResult)).andExpect(status().isNoContent());
 	}
 
 	@Test
@@ -269,6 +331,75 @@ class ResourceControllerIntegrationTest {
 	}
 
 	@Test
+	void availabilitySearchRespectsRulesAndPeakConcurrentCapacity() throws Exception {
+		UUID resourceWithCapacityId = UUID.randomUUID();
+		UUID resourceOutsideHoursId = UUID.randomUUID();
+		UUID userId = UUID.randomUUID();
+		LocalDate monday = LocalDate.now(ZoneOffset.UTC).with(TemporalAdjusters.next(DayOfWeek.MONDAY));
+		Instant start = monday.atTime(10, 0).toInstant(ZoneOffset.UTC);
+		Instant midpoint = monday.atTime(11, 0).toInstant(ZoneOffset.UTC);
+		Instant end = monday.atTime(12, 0).toInstant(ZoneOffset.UTC);
+		var capacityResource = ResourceEntity.from(new ResourceCreatedEvent(resourceWithCapacityId, "Capacity Room", null, 2,
+				"Floor 1", Instant.now()));
+		capacityResource.setAvailabilityRules(new ResourceAvailabilityRules("UTC",
+				Map.of("MONDAY", List.of(new AvailabilityTimeRange(LocalTime.of(9, 0), LocalTime.of(12, 0)))),
+				List.of(), List.of()));
+		resourceRepository.save(capacityResource);
+		var closedResource = ResourceEntity.from(new ResourceCreatedEvent(resourceOutsideHoursId, "Closed Room", null, 2,
+				"Floor 2", Instant.now()));
+		closedResource.setAvailabilityRules(new ResourceAvailabilityRules("UTC",
+				Map.of("MONDAY", List.of(new AvailabilityTimeRange(LocalTime.of(12, 0), LocalTime.of(17, 0)))),
+				List.of(), List.of()));
+		resourceRepository.save(closedResource);
+		reservationRepository.save(ReservationEntity.from(new ReservationCreatedEvent(resourceWithCapacityId, UUID.randomUUID(), userId,
+				start, midpoint, ReservationStatus.CONFIRMED, Instant.now())));
+		reservationRepository.save(ReservationEntity.from(new ReservationCreatedEvent(resourceWithCapacityId, UUID.randomUUID(), userId,
+				midpoint, end, ReservationStatus.CONFIRMED, Instant.now())));
+
+		mockMvc.perform(get("/resources/available")
+				.with(httpBasic("admin", "admin"))
+				.param("start", start.toString()).param("end", end.toString()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[*].resourceId", org.hamcrest.Matchers.hasItem(resourceWithCapacityId.toString())))
+				.andExpect(jsonPath("$[*].resourceId", org.hamcrest.Matchers.not(
+						org.hamcrest.Matchers.hasItem(resourceOutsideHoursId.toString()))));
+	}
+
+	@Test
+	void returnsAvailabilityCalendarAndCapacityAwareNextSlots() throws Exception {
+		UUID resourceId = UUID.randomUUID();
+		UUID userId = UUID.randomUUID();
+		LocalDate monday = LocalDate.of(2026, 6, 1);
+		Instant start = monday.atTime(9, 0).toInstant(ZoneOffset.UTC);
+		Instant occupiedStart = monday.atTime(10, 0).toInstant(ZoneOffset.UTC);
+		Instant occupiedEnd = monday.atTime(11, 0).toInstant(ZoneOffset.UTC);
+		var resource = ResourceEntity.from(new ResourceCreatedEvent(resourceId, "Calendar Room", null, 1,
+				"Floor 1", Instant.now()));
+		resource.setAvailabilityRules(new ResourceAvailabilityRules("UTC",
+				Map.of("MONDAY", List.of(new AvailabilityTimeRange(LocalTime.of(9, 0), LocalTime.of(12, 0)))),
+				List.of(), List.of()));
+		resourceRepository.save(resource);
+		reservationRepository.save(ReservationEntity.from(new ReservationCreatedEvent(resourceId, UUID.randomUUID(), userId,
+				occupiedStart, occupiedEnd, ReservationStatus.CONFIRMED, Instant.now())));
+
+		mockMvc.perform(get("/resources/{resourceId}/availability/calendar", resourceId)
+				.with(httpBasic("admin", "admin"))
+				.param("from", monday.toString()).param("to", monday.toString()).param("slotMinutes", "60"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].slots[8].bookable").value(false))
+				.andExpect(jsonPath("$[0].slots[9].bookable").value(true))
+				.andExpect(jsonPath("$[0].slots[9].remainingCapacity").value(1))
+				.andExpect(jsonPath("$[0].slots[10].remainingCapacity").value(0));
+
+		mockMvc.perform(get("/resources/{resourceId}/availability/next-slots", resourceId)
+				.with(httpBasic("admin", "admin"))
+				.param("after", start.toString()).param("durationMinutes", "60").param("count", "2"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].start").value(start.toString()))
+				.andExpect(jsonPath("$[1].start").value(monday.atTime(11, 0).toInstant(ZoneOffset.UTC).toString()));
+	}
+
+	@Test
 	void queriesReservationByUserResourceAndId() throws Exception {
 		UUID reservationId = UUID.randomUUID();
 		UUID resourceId = UUID.randomUUID();
@@ -284,6 +415,18 @@ class ResourceControllerIntegrationTest {
 				.andExpect(jsonPath("$[0].reservationId").value(reservationId.toString()));
 		mockMvc.perform(get("/reservations/{reservationId}", reservationId).with(httpBasic("admin", "admin"))).andExpect(status().isOk())
 				.andExpect(jsonPath("$.userId").value(userId.toString()));
+	}
+
+	@Test
+	void inspectsTheFullEventStreamForAnAggregate() throws Exception {
+		UUID resourceId = UUID.randomUUID();
+		commandGateway.sendAndWait(new CreateResourceCommand(resourceId, UUID.randomUUID(), "Event Room", null, 1, "Floor 1"));
+
+		mockMvc.perform(get("/admin/events/{aggregateId}", resourceId).with(httpBasic("admin", "admin")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].sequenceNumber").value(0))
+				.andExpect(jsonPath("$[0].eventType").value("ResourceCreatedEvent"))
+				.andExpect(jsonPath("$[0].payload.name").value("Event Room"));
 	}
 
 	@Test
@@ -329,9 +472,11 @@ class ResourceControllerIntegrationTest {
 				.param("to", firstDay.plusDays(1).toString()))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$[0].reservationCount").value(1))
+				.andExpect(jsonPath("$[0].bookableHours").value(24.0))
 				.andExpect(jsonPath("$[0].occupiedHours").value(1.0))
 				.andExpect(jsonPath("$[0].utilizationPercent").value(2.08))
 				.andExpect(jsonPath("$[1].reservationCount").value(1))
+				.andExpect(jsonPath("$[1].bookableHours").value(24.0))
 				.andExpect(jsonPath("$[1].occupiedHours").value(1.0));
 
 		var cancelResult = mockMvc.perform(post("/resources/{resourceId}/reservations/{reservationId}/cancel", resourceId, reservationId)
@@ -349,5 +494,28 @@ class ResourceControllerIntegrationTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$[0].occupiedHours").value(0.0))
 				.andExpect(jsonPath("$[1].occupiedHours").value(0.0));
+	}
+
+	@Test
+	void utilizationUsesScheduledBookableHoursAsItsCapacityDenominator() throws Exception {
+		UUID resourceId = UUID.randomUUID();
+		LocalDate monday = LocalDate.of(2026, 6, 1);
+		var resource = ResourceEntity.from(new ResourceCreatedEvent(resourceId, "Scheduled Room", null, 1,
+				"Floor 1", Instant.now()));
+		resource.setAvailabilityRules(new ResourceAvailabilityRules("UTC",
+				Map.of("MONDAY", List.of(new AvailabilityTimeRange(LocalTime.of(9, 0), LocalTime.of(17, 0)))),
+				List.of(), List.of()));
+		resourceRepository.save(resource);
+		var utilization = new ResourceUtilizationEntity(resourceId, monday);
+		utilization.adjust(BigDecimal.valueOf(7200), 1);
+		utilizationRepository.save(utilization);
+
+		mockMvc.perform(get("/resources/{resourceId}/utilization", resourceId)
+				.with(httpBasic("admin", "admin"))
+				.param("from", monday.toString()).param("to", monday.toString()))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].bookableHours").value(8.0))
+				.andExpect(jsonPath("$[0].occupiedHours").value(2.0))
+				.andExpect(jsonPath("$[0].utilizationPercent").value(25.0));
 	}
 }

@@ -3,6 +3,7 @@ package com.github.areeves.axon_resource_booking.resources;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -21,7 +22,6 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 @RequestMapping("/resources")
 public class ResourceUtilizationQueryController {
-	private static final long SECONDS_PER_DAY = 86_400;
 	private static final long MAX_RANGE_DAYS = 366;
 
 	private final ResourceRepository resourceRepository;
@@ -48,16 +48,25 @@ public class ResourceUtilizationQueryController {
 		Map<LocalDate, ResourceUtilizationEntity> utilizationByDate = utilizationRepository
 				.findByResourceIdAndUtilizationDateBetweenOrderByUtilizationDateAsc(resourceId, from, to).stream()
 				.collect(Collectors.toMap(ResourceUtilizationEntity::getUtilizationDate, Function.identity()));
-		BigDecimal capacitySecondsPerDay = BigDecimal.valueOf(resource.getCapacity()).multiply(BigDecimal.valueOf(SECONDS_PER_DAY));
+		ResourceAvailabilityRules rules = resource.getAvailabilityRules();
 
 		return LongStream.rangeClosed(from.toEpochDay(), to.toEpochDay()).mapToObj(LocalDate::ofEpochDay).map(date -> {
 			ResourceUtilizationEntity utilization = utilizationByDate.get(date);
 			BigDecimal occupiedSeconds = utilization == null ? BigDecimal.ZERO : utilization.getOccupiedSeconds();
 			long reservationCount = utilization == null ? 0 : utilization.getReservationCount();
+			var dayStart = date.atStartOfDay(ZoneOffset.UTC).toInstant();
+			var dayEnd = date.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+			BigDecimal bookableSeconds = ResourceAvailability.openWindows(rules, dayStart, dayEnd).stream()
+					.map(interval -> BigDecimal.valueOf(java.time.Duration.between(interval.start(), interval.end()).getSeconds())
+							.add(BigDecimal.valueOf(java.time.Duration.between(interval.start(), interval.end()).getNano(), 9)))
+					.reduce(BigDecimal.ZERO, BigDecimal::add);
+			BigDecimal capacitySeconds = bookableSeconds.multiply(BigDecimal.valueOf(resource.getCapacity()));
+			BigDecimal bookableHours = bookableSeconds.divide(BigDecimal.valueOf(3600), 2, RoundingMode.HALF_UP);
 			BigDecimal occupiedHours = occupiedSeconds.divide(BigDecimal.valueOf(3600), 2, RoundingMode.HALF_UP);
-			BigDecimal utilizationPercent = occupiedSeconds.multiply(BigDecimal.valueOf(100))
-					.divide(capacitySecondsPerDay, 2, RoundingMode.HALF_UP);
-			return new ResourceDailyUtilization(resourceId, date, reservationCount, occupiedHours, utilizationPercent);
+			BigDecimal utilizationPercent = capacitySeconds.signum() == 0 ? BigDecimal.ZERO
+					: occupiedSeconds.multiply(BigDecimal.valueOf(100)).divide(capacitySeconds, 2, RoundingMode.HALF_UP);
+			return new ResourceDailyUtilization(resourceId, date, reservationCount, bookableHours, occupiedHours,
+					utilizationPercent);
 		}).toList();
 	}
 }
